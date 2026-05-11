@@ -5,6 +5,7 @@ import { Header } from "./Header.js";
 import { StatusPanel } from "./StatusPanel.js";
 
 interface AppProps {
+  runtimeMode: string;
   model: string;
   collection: string;
   ollama: string;
@@ -12,10 +13,10 @@ interface AppProps {
   chroma: string;
 }
 
-export function App({ model, collection, ollama, rag, chroma }: AppProps) {
+export function App({ runtimeMode, model, collection, ollama, rag, chroma }: AppProps) {
   return (
     <Box flexDirection="column" padding={1}>
-      <Header model={model} collection={collection} />
+      <Header runtimeMode={runtimeMode} model={model} collection={collection} />
       <Box marginTop={1}>
         <StatusPanel ollama={ollama} rag={rag} chroma={chroma} />
       </Box>

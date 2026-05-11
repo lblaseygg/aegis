@@ -11,6 +11,7 @@ describe("validateConfig", () => {
         rag_api_base_url: "http://127.0.0.1:8088",
       },
       runtime: {
+        mode: "docker",
         model: "llama3.2:3b",
         collection: "default",
         embedding_provider: "hash",
@@ -46,6 +47,7 @@ describe("validateConfig", () => {
           rag_api_base_url: "http://127.0.0.1:8088",
         },
         runtime: {
+          mode: "docker",
           model: "llama3.2:3b",
           collection: "default",
           embedding_provider: "hash",
@@ -69,5 +71,40 @@ describe("validateConfig", () => {
         },
       }),
     ).toThrow();
+  });
+
+  test("accepts host.docker.internal for offline local containers", () => {
+    const config = validateConfig({
+      offline_mode: true,
+      network: {
+        ollama_base_url: "http://host.docker.internal:11434",
+        rag_api_base_url: "http://127.0.0.1:8088",
+      },
+      runtime: {
+        mode: "native",
+        model: "llama3.2:3b",
+        collection: "default",
+        embedding_provider: "hash",
+      },
+      rag: {
+        chunk_size: 900,
+        chunk_overlap: 150,
+        min_chunk_chars: 200,
+        retrieval: {
+          top_k: 6,
+          score_threshold: 0.45,
+          rerank: false,
+        },
+      },
+      audit: {
+        log_prompts: false,
+        log_responses: false,
+        log_source_paths: true,
+        log_document_hashes: true,
+        log_errors: true,
+      },
+    });
+
+    expect(config.network.ollama_base_url).toContain("host.docker.internal");
   });
 });

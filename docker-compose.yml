@@ -16,7 +16,7 @@ services:
       dockerfile: Dockerfile
     container_name: aegis-rag-api
     environment:
-      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       CHROMA_PATH: /data/chroma
       DOCUMENT_PATH: /data/documents
       AUDIT_LOG_PATH: /data/audit/audit.jsonl
@@ -28,8 +28,6 @@ services:
       - ./data/chroma:/data/chroma
       - ./data/documents:/data/documents
       - ./data/audit:/data/audit
-    depends_on:
-      - ollama
     restart: unless-stopped
 
   cli:
@@ -38,7 +36,7 @@ services:
       dockerfile: ./docker/cli/Dockerfile
     container_name: aegis-cli
     environment:
-      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       RAG_API_BASE_URL: http://rag-api:8088
       AEGIS_CONFIG_PATH: /data/config/config.yaml
       AEGIS_AUDIT_LOG_PATH: /data/audit/audit.jsonl
@@ -46,7 +44,6 @@ services:
       - ./data:/data
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
-      - ollama
       - rag-api
     profiles:
       - cli

@@ -4,6 +4,7 @@ import chalk from "chalk";
 import { ConfigService } from "../services/configService.js";
 import { OllamaClient } from "../services/ollamaClient.js";
 import { RagClient } from "../services/ragClient.js";
+import { RuntimeService } from "../services/runtimeService.js";
 
 function line(label: string, value: string): string {
   return `${chalk.bold(label.padEnd(14))}${value}`;
@@ -11,6 +12,7 @@ function line(label: string, value: string): string {
 
 export async function runDoctor(): Promise<void> {
   const config = await new ConfigService().load();
+  const runtime = await new RuntimeService().inspect(config);
   const ollama = new OllamaClient(config.network.ollama_base_url);
   const rag = new RagClient(config.network.rag_api_base_url);
 
@@ -21,6 +23,9 @@ export async function runDoctor(): Promise<void> {
 
   const output = [
     line("Offline mode", String(config.offline_mode)),
+    line("Runtime", runtime.mode),
+    line("Acceleration", runtime.acceleration),
+    line("Native Ollama", runtime.nativeOllamaInstalled ? "installed" : "not found"),
     line("Ollama", ollamaStatus),
     line("RAG API", ragStatus ? ragStatus.status : "offline"),
     line("ChromaDB", ragStatus ? ragStatus.chroma : "unknown"),

@@ -4,14 +4,15 @@ import { Box, Text } from "ink";
 interface HeaderProps {
   model: string;
   collection: string;
+  runtimeMode: string;
 }
 
-export function Header({ model, collection }: HeaderProps) {
+export function Header({ model, collection, runtimeMode }: HeaderProps) {
   return (
     <Box justifyContent="space-between">
       <Text color="cyan">Aegis</Text>
       <Text>
-        Model: {model}  Collection: {collection}
+        Runtime: {runtimeMode}  Model: {model}  Collection: {collection}
       </Text>
     </Box>
   );

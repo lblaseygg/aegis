@@ -5,7 +5,7 @@ import { ConfigError } from "./errors.js";
 
 const localUrlSchema = z.string().url().refine((value) => {
   const url = new URL(value);
-  return ["127.0.0.1", "localhost", "ollama", "rag-api"].includes(url.hostname);
+  return ["127.0.0.1", "localhost", "ollama", "rag-api", "host.docker.internal"].includes(url.hostname);
 }, "URL must remain local while offline mode is enabled.");
 
 const configSchema = z.object({
@@ -15,6 +15,7 @@ const configSchema = z.object({
     rag_api_base_url: z.string().url(),
   }),
   runtime: z.object({
+    mode: z.enum(["native", "docker"]),
     model: z.string().min(1),
     collection: z.string().min(1),
     embedding_provider: z.string().min(1),

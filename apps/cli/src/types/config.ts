@@ -5,6 +5,7 @@ export interface AegisConfig {
     rag_api_base_url: string;
   };
   runtime: {
+    mode: "native" | "docker";
     model: string;
     collection: string;
     embedding_provider: string;

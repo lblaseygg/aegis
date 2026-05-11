@@ -32,6 +32,42 @@ npm run install:cli
 aegis
 ```
 
+## Runtime Modes
+
+Aegis supports two local runtime modes:
+
+- `native`: for macOS users running Ollama on the host with Metal acceleration
+- `docker`: for users running the full local stack inside Docker
+
+Check or switch the mode:
+
+```bash
+aegis runtime status
+aegis runtime use native
+aegis runtime use docker
+```
+
+For macOS users, `aegis init` now prefers `native` automatically when a native Ollama install is detected.
+
+### macOS Native Ollama
+
+On macOS, the recommended setup is:
+
+1. Install Ollama natively on the host
+2. Pull a local model into the host Ollama runtime
+3. Use `aegis up` to start only the RAG API container
+
+Example:
+
+```bash
+ollama pull llama3.2:3b
+aegis runtime use native
+aegis up
+aegis doctor
+```
+
+In native mode, `aegis doctor` reports `Acceleration: Metal (native Ollama)`.
+
 ## Chat Modes
 
 Bare `aegis` now opens the interactive chat UI. It supports two modes:
@@ -57,8 +93,8 @@ Useful slash commands inside chat:
 To install and select Gemma locally:
 
 ```bash
-docker exec aegis-ollama ollama pull gemma:7b
-aegis models select gemma:7b
+ollama pull llama3.2:3b
+aegis models select llama3.2:3b
 ```
 
 Longer local generations can be tuned with `AEGIS_QUERY_TIMEOUT_MS`, `AEGIS_OLLAMA_GENERATE_TIMEOUT_MS`, `AEGIS_OLLAMA_NUM_PREDICT`, `AEGIS_OLLAMA_NUM_CTX`, `OLLAMA_GENERATE_TIMEOUT_SECONDS`, `OLLAMA_NUM_PREDICT`, or `OLLAMA_NUM_CTX`.
@@ -75,7 +111,8 @@ Longer local generations can be tuned with `AEGIS_QUERY_TIMEOUT_MS`, `AEGIS_OLLA
 Start the backing services:
 
 ```bash
-docker compose up -d ollama rag-api
+aegis runtime use docker
+aegis up
 ```
 
 Run the CLI container:

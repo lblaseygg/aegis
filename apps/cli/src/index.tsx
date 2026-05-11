@@ -13,6 +13,7 @@ import { runInit } from "./commands/init.js";
 import { runLogsTail } from "./commands/logs.js";
 import { runModelsList, runModelsSelect } from "./commands/models.js";
 import { runIngest, runQuery } from "./commands/rag.js";
+import { runRuntimeStatus, runRuntimeUse } from "./commands/runtime.js";
 import { runUp } from "./commands/up.js";
 import { APP_NAME } from "./lib/constants.js";
 import { ConfigService } from "./services/configService.js";
@@ -30,6 +31,7 @@ async function runDashboard(): Promise<void> {
 
   render(
     <App
+      runtimeMode={config.runtime.mode}
       model={config.runtime.model}
       collection={config.runtime.collection}
       ollama={ollamaStatus}
@@ -104,6 +106,23 @@ models
   });
 
 const rag = program.command("rag").description("Operate the local retrieval pipeline");
+
+const runtime = program.command("runtime").description("Inspect or switch the local runtime mode");
+
+runtime
+  .command("status")
+  .description("Print the current runtime mode and platform details")
+  .action(async () => {
+    await runRuntimeStatus();
+  });
+
+runtime
+  .command("use")
+  .argument("<mode>", "Runtime mode: native or docker")
+  .description("Select the local runtime mode")
+  .action(async (mode: string) => {
+    await runRuntimeUse(mode as "native" | "docker");
+  });
 
 rag
   .command("ingest")
