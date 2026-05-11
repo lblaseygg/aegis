@@ -11,6 +11,8 @@
   },
   "scripts": {
     "build": "npm run build --workspace @aegis/cli",
+    "build:macos-app": "bash scripts/macos/build-installer.sh --app",
+    "build:macos-pkg": "bash scripts/macos/build-installer.sh --pkg",
     "dev:cli": "npm run dev --workspace @aegis/cli",
     "install:cli": "npm run build --workspace @aegis/cli && npm link --workspace @aegis/cli",
     "test": "npm run test --workspace @aegis/cli",

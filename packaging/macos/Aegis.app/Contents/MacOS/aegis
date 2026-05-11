@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RESOURCES_DIR="${APP_ROOT}/Resources"
+SUPPORT_DIR="${HOME}/Library/Application Support/Aegis"
+VERSION_FILE="${RESOURCES_DIR}/VERSION"
+INSTALLED_VERSION_FILE="${SUPPORT_DIR}/.installed-version"
+
+if [[ ! -f "${INSTALLED_VERSION_FILE}" ]] || [[ "$(cat "${INSTALLED_VERSION_FILE}")" != "$(cat "${VERSION_FILE}")" ]]; then
+  "${RESOURCES_DIR}/bootstrap.sh" --app-root "${APP_ROOT}" --support-dir "${SUPPORT_DIR}"
+fi
+
+export AEGIS_CONFIG_PATH="${SUPPORT_DIR}/data/config/config.yaml"
+export AEGIS_AUDIT_LOG_PATH="${SUPPORT_DIR}/data/audit/audit.jsonl"
+export AEGIS_STATE_DIR="${SUPPORT_DIR}/state"
+export OLLAMA_BASE_URL="http://127.0.0.1:11434"
+export RAG_API_BASE_URL="http://127.0.0.1:8088"
+export PATH="${SUPPORT_DIR}/bin:${PATH}"
+
+exec "${SUPPORT_DIR}/runtime/node/bin/node" "${SUPPORT_DIR}/runtime/apps/cli/dist/index.js" "$@"

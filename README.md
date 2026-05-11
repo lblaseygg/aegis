@@ -32,6 +32,39 @@ npm run install:cli
 aegis
 ```
 
+## macOS Package
+
+The repo now includes a macOS packaging pipeline that builds:
+
+- `Aegis.app`
+- `Aegis.pkg`
+
+The package is designed for the user flow:
+
+1. install Aegis
+2. open Terminal
+3. run `aegis`
+
+On first launch, Aegis bootstraps its embedded runtimes and support files under:
+
+`~/Library/Application Support/Aegis`
+
+That first-run setup:
+
+- installs the embedded CLI, RAG API, Python runtime, and bundled native Ollama runtime
+- starts Ollama and the RAG API as user launch agents
+- writes an Aegis shell PATH entry for future sessions
+- imports an optional bundled model store
+
+Build commands:
+
+```bash
+npm run build:macos-app
+npm run build:macos-pkg
+```
+
+For the full packaging inputs and signing environment variables, see [macOS installer guide](/Users/blasey/Developer/aegis/docs/macos-installer.md).
+
 ## Runtime Modes
 
 Aegis supports two local runtime modes:

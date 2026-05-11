@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.aegis.rag-api</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>WorkingDirectory</key>
+  <string>__SUPPORT_DIR__/runtime/rag-api</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON_BIN__</string>
+    <string>-m</string>
+    <string>uvicorn</string>
+    <string>app.main:app</string>
+    <string>--host</string>
+    <string>127.0.0.1</string>
+    <string>--port</string>
+    <string>8088</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONPATH</key>
+    <string>__PYTHONPATH__</string>
+    <key>OLLAMA_BASE_URL</key>
+    <string>http://127.0.0.1:11434</string>
+    <key>CHROMA_PATH</key>
+    <string>__SUPPORT_DIR__/data/chroma</string>
+    <key>DOCUMENT_PATH</key>
+    <string>__SUPPORT_DIR__/data/documents</string>
+    <key>AUDIT_LOG_PATH</key>
+    <string>__SUPPORT_DIR__/data/audit/audit.jsonl</string>
+    <key>OFFLINE_MODE</key>
+    <string>true</string>
+    <key>EMBEDDING_PROVIDER</key>
+    <string>hash</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>__LOG_DIR__/rag-api.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG_DIR__/rag-api.stderr.log</string>
+</dict>
+</plist>
