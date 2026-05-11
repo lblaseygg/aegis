@@ -16,6 +16,7 @@ coverage
 bundle
 data/audit/*.jsonl
 data/audit/exports
+data/config/config.yaml
 data/chroma
 data/ollama
 models/embeddings/*
