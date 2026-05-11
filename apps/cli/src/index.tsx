@@ -21,6 +21,24 @@ import { RagClient } from "./services/ragClient.js";
 
 const program = new Command();
 
+async function runDashboard(): Promise<void> {
+  const config = await new ConfigService().load();
+  const [ollamaStatus, ragStatus] = await Promise.all([
+    new OllamaClient(config.network.ollama_base_url).health(),
+    new RagClient(config.network.rag_api_base_url).health().catch(() => null),
+  ]);
+
+  render(
+    <App
+      model={config.runtime.model}
+      collection={config.runtime.collection}
+      ollama={ollamaStatus}
+      rag={ragStatus?.status ?? "offline"}
+      chroma={ragStatus?.chroma ?? "unknown"}
+    />,
+  );
+}
+
 program
   .name("aegis")
   .description(APP_NAME)
@@ -58,21 +76,7 @@ program
   .command("dashboard")
   .description("Render the Ink operator dashboard")
   .action(async () => {
-    const config = await new ConfigService().load();
-    const [ollamaStatus, ragStatus] = await Promise.all([
-      new OllamaClient(config.network.ollama_base_url).health(),
-      new RagClient(config.network.rag_api_base_url).health().catch(() => null),
-    ]);
-
-    render(
-      <App
-        model={config.runtime.model}
-        collection={config.runtime.collection}
-        ollama={ollamaStatus}
-        rag={ragStatus?.status ?? "offline"}
-        chroma={ragStatus?.chroma ?? "unknown"}
-      />,
-    );
+    await runDashboard();
   });
 
 program
@@ -157,4 +161,13 @@ bundle
     await runBundleVerify(bundlePath);
   });
 
-program.parse();
+async function main(): Promise<void> {
+  if (process.argv.slice(2).length === 0) {
+    await runDashboard();
+    return;
+  }
+
+  await program.parseAsync(process.argv);
+}
+
+void main();
