@@ -1,0 +1,39 @@
+{
+  "name": "@aegis/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "aegis": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.tsx",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "axios": "^1.9.0",
+    "boxen": "^8.0.1",
+    "chalk": "^5.4.1",
+    "commander": "^14.0.0",
+    "conf": "^14.0.0",
+    "date-fns": "^4.1.0",
+    "execa": "^9.5.2",
+    "ink": "^6.2.3",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "nanoid": "^5.1.5",
+    "pino": "^9.7.0",
+    "react": "^19.1.0",
+    "yaml": "^2.8.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.1",
+    "@types/react": "^19.1.5",
+    "tsx": "^4.20.1",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.3"
+  }
+}

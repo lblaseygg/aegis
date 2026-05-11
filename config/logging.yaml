@@ -1,0 +1,4 @@
+logger:
+  level: info
+  format: json
+  destination: ./data/audit/audit.jsonl

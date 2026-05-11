@@ -1,0 +1,2 @@
+Operators should run aegis doctor before starting a new ingestion batch.
+The preferred default model for constrained hardware is llama3.2:3b.

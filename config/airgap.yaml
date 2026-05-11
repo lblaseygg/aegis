@@ -1,0 +1,9 @@
+offline_mode: true
+
+network:
+  allow_non_local_urls: false
+  allow_model_pulls: false
+
+bundle:
+  verify_checksums: true
+  export_models: true
