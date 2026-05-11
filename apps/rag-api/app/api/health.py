@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
-
-from app.config import settings
+from fastapi import APIRouter, Request
 
 router = APIRouter()
 
 
 @router.get("/health")
-async def health() -> dict[str, str | bool]:
+async def health(request: Request) -> dict[str, str | bool | int]:
+    runtime = request.app.state.runtime
     return {
         "status": "ok",
         "chroma": "ready",
-        "ollama": settings.ollama_base_url,
-        "offline_mode": settings.offline_mode,
+        "ollama": runtime.generator.health(),
+        "offline_mode": request.app.state.settings.offline_mode,
+        "collections": len(runtime.vector_store.collection_names()),
     }

@@ -13,7 +13,6 @@ dependencies = [
   "pypdf>=5.5.0",
   "python-docx>=1.1.2",
   "python-multipart>=0.0.20",
-  "sentence-transformers>=4.1.0",
   "uvicorn>=0.34.2"
 ]
 
@@ -21,6 +20,9 @@ dependencies = [
 dev = [
   "httpx>=0.28.1",
   "pytest>=8.3.5"
+]
+embeddings = [
+  "sentence-transformers>=4.1.0"
 ]
 
 [build-system]
