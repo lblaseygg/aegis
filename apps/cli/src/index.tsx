@@ -163,7 +163,7 @@ bundle
 
 async function main(): Promise<void> {
   if (process.argv.slice(2).length === 0) {
-    await runDashboard();
+    await runChat();
     return;
   }
 
