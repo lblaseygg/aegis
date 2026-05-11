@@ -14,6 +14,7 @@ __pycache__
 .env
 coverage
 bundle
+aegis-airgap-bundle.tar.gz
 data/audit/*.jsonl
 data/audit/exports
 data/config/config.yaml

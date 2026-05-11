@@ -2,10 +2,11 @@ FROM node:22-bookworm-slim
 
 WORKDIR /app
 
-COPY package.json tsconfig.json ./
+COPY package.json package-lock.json tsconfig.json ./
 COPY apps/cli/package.json ./apps/cli/package.json
+COPY apps/cli/tsconfig.json ./apps/cli/tsconfig.json
 
-RUN npm install
+RUN npm ci
 
 COPY apps/cli ./apps/cli
 

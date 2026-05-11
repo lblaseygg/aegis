@@ -14,6 +14,22 @@ The repository is structured as a greenfield MVP that tracks the build plan in [
 - `scripts/`: bundle, verify, install, and smoke-test utilities
 - `docs/`: operator, security, architecture, and air-gap documentation
 
+## Quickstart
+
+1. `npm install`
+2. `python3 -m venv .venv`
+3. `.venv/bin/pip install -e './apps/rag-api[dev]'`
+4. `npm run build`
+5. `node apps/cli/dist/index.js init`
+6. `node apps/cli/dist/index.js doctor`
+
+## Air-gap bundle flow
+
+- `node apps/cli/dist/index.js bundle create`
+- `./scripts/verify-bundle.sh ./bundle`
+- `./scripts/load-docker-images.sh ./bundle`
+- `./scripts/install-offline.sh ./runtime`
+
 ## Local targets
 
 - Ollama: `http://127.0.0.1:11434`

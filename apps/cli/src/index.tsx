@@ -5,7 +5,7 @@ import { Command } from "commander";
 
 import { App } from "./components/App.js";
 import { runAuditExport } from "./commands/audit.js";
-import { runBundleVerify } from "./commands/bundle.js";
+import { runBundleCreate, runBundleVerify } from "./commands/bundle.js";
 import { runChat } from "./commands/chat.js";
 import { runDoctor } from "./commands/doctor.js";
 import { runDown } from "./commands/down.js";
@@ -141,6 +141,13 @@ audit
   });
 
 const bundle = program.command("bundle").description("Offline bundle helpers");
+
+bundle
+  .command("create")
+  .description("Build an air-gap bundle from the local workspace")
+  .action(async () => {
+    await runBundleCreate();
+  });
 
 bundle
   .command("verify")
