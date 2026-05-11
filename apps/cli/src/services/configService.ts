@@ -27,7 +27,17 @@ export class ConfigService {
   async load(): Promise<AegisConfig> {
     await this.init();
     const raw = await readFile(this.configPath, "utf8");
-    return validateConfig(YAML.parse(raw));
+    const config = validateConfig(YAML.parse(raw));
+
+    if (process.env.OLLAMA_BASE_URL) {
+      config.network.ollama_base_url = process.env.OLLAMA_BASE_URL;
+    }
+
+    if (process.env.RAG_API_BASE_URL) {
+      config.network.rag_api_base_url = process.env.RAG_API_BASE_URL;
+    }
+
+    return validateConfig(config);
   }
 
   async save(config: AegisConfig): Promise<void> {

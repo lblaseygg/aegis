@@ -29,7 +29,7 @@ To make `aegis` available directly in your terminal:
 
 ```bash
 npm run install:cli
-aegis --help
+aegis
 ```
 
 ## Air-gap bundle flow
@@ -38,6 +38,25 @@ aegis --help
 - `./scripts/verify-bundle.sh ./bundle`
 - `./scripts/load-docker-images.sh ./bundle`
 - `./scripts/install-offline.sh ./runtime`
+
+## Docker CLI Usage
+
+Start the backing services:
+
+```bash
+docker compose up -d ollama rag-api
+```
+
+Run the CLI container:
+
+```bash
+docker compose run --rm cli doctor
+docker compose run --rm cli rag ingest /data/documents
+docker compose run --rm cli rag query "What is the backup policy?"
+docker compose run --rm cli chat
+```
+
+The container entrypoint also accepts `docker compose run --rm cli aegis ...` if that is more natural for the operator.
 
 ## Local targets
 
