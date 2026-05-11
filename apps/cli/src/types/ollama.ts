@@ -3,3 +3,7 @@ export interface OllamaModelSummary {
   size: number;
   modified_at: string;
 }
+
+export interface OllamaGenerateResponse {
+  response: string;
+}

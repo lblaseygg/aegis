@@ -3,23 +3,17 @@ import { Box, Text, useApp, useInput } from "ink";
 import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
 
-import type { QueryResponse } from "../types/rag.js";
-
-interface Message {
-  role: "user" | "assistant";
-  text: string;
-}
+import type { ChatSessionState, ChatTurnResult } from "../types/chat.js";
 
 interface ChatViewProps {
-  model: string;
-  collection: string;
-  onSubmit: (value: string) => Promise<QueryResponse>;
+  initialSession: ChatSessionState;
+  onSubmit: (value: string, session: ChatSessionState) => Promise<ChatTurnResult>;
 }
 
-export function ChatView({ model, collection, onSubmit }: ChatViewProps) {
+export function ChatView({ initialSession, onSubmit }: ChatViewProps) {
   const { exit } = useApp();
+  const [session, setSession] = useState(initialSession);
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,14 +31,11 @@ export function ChatView({ model, collection, onSubmit }: ChatViewProps) {
 
     setPending(true);
     setError(null);
-    setMessages((current) => [...current, { role: "user", text: trimmed }]);
     setInput("");
 
     try {
-      const response = await onSubmit(trimmed);
-      const sources = response.sources.map((source) => source.file_name).join(", ");
-      const answer = sources ? `${response.answer}\n\nSources: ${sources}` : response.answer;
-      setMessages((current) => [...current, { role: "assistant", text: answer }]);
+      const response = await onSubmit(trimmed, session);
+      setSession(response.session);
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : "Unknown chat error");
     } finally {
@@ -55,11 +46,18 @@ export function ChatView({ model, collection, onSubmit }: ChatViewProps) {
   return (
     <Box flexDirection="column">
       <Text color="cyan">
-        Chat | {model} | {collection}
+        Chat | {session.model} | {session.mode} | {session.behavior} | {session.collection}
       </Text>
+      <Text dimColor>Workspace: {session.cwd}</Text>
       <Box flexDirection="column" marginTop={1}>
-        {messages.length === 0 ? <Text dimColor>Ask a grounded question about your local knowledge base.</Text> : null}
-        {messages.map((message, index) => (
+        {session.history.length === 0 ? (
+          <Text dimColor>
+            {session.mode === "docs"
+              ? "Ask a grounded question about your local knowledge base."
+              : "Ask about the current workspace, or use /review for code review mode."}
+          </Text>
+        ) : null}
+        {session.history.map((message, index) => (
           <Box key={`${message.role}-${index}`} flexDirection="column" marginBottom={1}>
             <Text color={message.role === "user" ? "yellow" : "green"}>
               {message.role === "user" ? "You" : "Assistant"}
@@ -82,10 +80,10 @@ export function ChatView({ model, collection, onSubmit }: ChatViewProps) {
       <Box marginTop={1}>
         {pending ? (
           <Text color="cyan">
-            <Spinner type="dots" /> Querying local context...
+            <Spinner type="dots" /> Resolving local context...
           </Text>
         ) : (
-          <Text dimColor>[Enter] send  [Ctrl+C] exit</Text>
+          <Text dimColor>[Enter] send  [Ctrl+C] exit  [/help] commands</Text>
         )}
       </Box>
     </Box>

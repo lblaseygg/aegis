@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from typing import Iterable
 from urllib.error import URLError
@@ -25,6 +26,10 @@ Answer with:
 2. Supporting source names
 3. Uncertainty, if any
 """
+
+DEFAULT_OLLAMA_TIMEOUT_SECONDS = 60
+DEFAULT_OLLAMA_NUM_PREDICT = 96
+DEFAULT_OLLAMA_NUM_CTX = 2048
 
 
 @dataclass(slots=True)
@@ -76,7 +81,18 @@ class Generator:
         return "unhealthy"
 
     def _call_ollama(self, prompt: str, model: str) -> str:
-        payload = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode("utf-8")
+        payload = json.dumps(
+            {
+                "model": model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "num_predict": int(os.getenv("OLLAMA_NUM_PREDICT", DEFAULT_OLLAMA_NUM_PREDICT)),
+                    "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", DEFAULT_OLLAMA_NUM_CTX)),
+                    "temperature": 0.2,
+                },
+            }
+        ).encode("utf-8")
         request = Request(
             f"{self.ollama_base_url}/api/generate",
             data=payload,
@@ -84,7 +100,8 @@ class Generator:
             headers={"Content-Type": "application/json"},
         )
 
-        with urlopen(request, timeout=30) as response:
+        timeout_seconds = float(os.getenv("OLLAMA_GENERATE_TIMEOUT_SECONDS", DEFAULT_OLLAMA_TIMEOUT_SECONDS))
+        with urlopen(request, timeout=timeout_seconds) as response:
             body = json.loads(response.read().decode("utf-8"))
             answer = body.get("response")
             if not isinstance(answer, str):

@@ -1,0 +1,179 @@
+import { access, readFile, readdir, stat } from "node:fs/promises";
+import path from "node:path";
+import { constants } from "node:fs";
+
+import { execa } from "execa";
+
+const IGNORED_SEGMENTS = new Set([
+  ".git",
+  "node_modules",
+  "dist",
+  ".venv",
+  "coverage",
+  "data",
+]);
+
+interface FileMatch {
+  file: string;
+  lines: number[];
+}
+
+export class CodeContextService {
+  async listFiles(cwd: string, limit = 25): Promise<string[]> {
+    try {
+      const result = await execa("rg", ["--files", "--hidden", "-g", "!.git", "-g", "!node_modules", "-g", "!dist"], {
+        cwd,
+      });
+      return result.stdout.split("\n").filter(Boolean).slice(0, limit);
+    } catch {
+      const files: string[] = [];
+      await this.walk(cwd, cwd, files, limit);
+      return files;
+    }
+  }
+
+  async buildPrompt(input: {
+    cwd: string;
+    question: string;
+    model: string;
+    behavior: "chat" | "review";
+    history: Array<{ role: "user" | "assistant"; text: string }>;
+  }): Promise<string> {
+    const files = await this.listFiles(input.cwd, 40);
+    const relevant = await this.findRelevantFiles(input.cwd, input.question);
+    const snippets = await Promise.all(relevant.slice(0, 6).map((match) => this.readSnippet(input.cwd, match)));
+    const transcript = input.history
+      .slice(-6)
+      .map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.text}`)
+      .join("\n\n");
+
+    const system =
+      input.behavior === "review"
+        ? "You are reviewing a local codebase. Prioritize bugs, risks, regressions, and missing tests. Be concrete."
+        : "You are assisting with a local codebase. Answer using the provided workspace context and be explicit about uncertainty.";
+
+    return `${system}
+
+Workspace root:
+${input.cwd}
+
+Top-level file context:
+${files.map((file) => `- ${file}`).join("\n") || "- No files detected"}
+
+Relevant file snippets:
+${snippets.filter(Boolean).join("\n\n") || "No targeted file snippets matched the current question."}
+
+Recent conversation:
+${transcript || "No prior conversation."}
+
+User request:
+${input.question}
+
+Instructions:
+- If the request is about code behavior, cite the relevant file paths.
+- If the available context is insufficient, say so plainly.
+- Do not invent files or symbols that are not present in the provided context.`;
+  }
+
+  private async findRelevantFiles(cwd: string, question: string): Promise<FileMatch[]> {
+    const terms = extractTerms(question);
+    if (terms.length === 0) {
+      return [];
+    }
+
+    try {
+      const result = await execa("rg", ["-n", "-i", "--hidden", terms.join("|"), cwd], { reject: false });
+      if (!result.stdout.trim()) {
+        return [];
+      }
+
+      const grouped = new Map<string, number[]>();
+      for (const line of result.stdout.split("\n")) {
+        const [file, lineNumber] = line.split(":", 3);
+        if (!file || !lineNumber) {
+          continue;
+        }
+
+        const relative = path.relative(cwd, file);
+        if (!relative || isIgnored(relative)) {
+          continue;
+        }
+
+        const lines = grouped.get(relative) ?? [];
+        lines.push(Number(lineNumber));
+        grouped.set(relative, lines);
+      }
+
+      return [...grouped.entries()].map(([file, lines]) => ({ file, lines }));
+    } catch {
+      return [];
+    }
+  }
+
+  private async readSnippet(cwd: string, match: FileMatch): Promise<string> {
+    const absolutePath = path.join(cwd, match.file);
+    const content = await readFile(absolutePath, "utf8");
+    const allLines = content.split("\n");
+    const selected = new Set<number>();
+    for (const lineNumber of match.lines.slice(0, 3)) {
+      for (let index = Math.max(1, lineNumber - 2); index <= Math.min(allLines.length, lineNumber + 2); index += 1) {
+        selected.add(index);
+      }
+    }
+
+    const snippet = [...selected]
+      .sort((left, right) => left - right)
+      .map((lineNumber) => `${lineNumber}: ${allLines[lineNumber - 1] ?? ""}`)
+      .join("\n");
+
+    return `File: ${match.file}\n${snippet}`;
+  }
+
+  private async walk(root: string, current: string, files: string[], limit: number): Promise<void> {
+    if (files.length >= limit) {
+      return;
+    }
+
+    const entries = await readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      if (files.length >= limit) {
+        return;
+      }
+
+      if (IGNORED_SEGMENTS.has(entry.name)) {
+        continue;
+      }
+
+      const absolute = path.join(current, entry.name);
+      const relative = path.relative(root, absolute);
+      if (entry.isDirectory()) {
+        await this.walk(root, absolute, files, limit);
+        continue;
+      }
+
+      files.push(relative);
+    }
+  }
+}
+
+function extractTerms(question: string): string[] {
+  const terms = question
+    .toLowerCase()
+    .match(/[a-z0-9_./-]{3,}/g)
+    ?.filter((term) => !["what", "does", "have", "with", "that", "from", "this"].includes(term));
+  return [...new Set(terms ?? [])].slice(0, 8);
+}
+
+function isIgnored(relativePath: string): boolean {
+  return relativePath.split(path.sep).some((segment) => IGNORED_SEGMENTS.has(segment));
+}
+
+export async function isWorkspacePath(value: string): Promise<boolean> {
+  try {
+    const resolved = path.resolve(value);
+    await access(resolved, constants.R_OK);
+    return (await stat(resolved)).isDirectory();
+  } catch {
+    return false;
+  }
+}

@@ -19,6 +19,7 @@ data/audit/*.jsonl
 data/audit/exports
 data/config/config.yaml
 data/chroma
+data/documents
 data/ollama
 models/embeddings/*
 !models/embeddings/.gitkeep

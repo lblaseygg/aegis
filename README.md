@@ -32,6 +32,37 @@ npm run install:cli
 aegis
 ```
 
+## Chat Modes
+
+Bare `aegis` now opens the interactive chat UI. It supports two modes:
+
+- `docs`: grounded document QA over ingested content
+- `code`: local codebase assistant mode for the current working directory
+
+Useful slash commands inside chat:
+
+```text
+/mode docs
+/mode code
+/model gemma:7b
+/collection default
+/review
+/review off
+/cwd /path/to/project
+/files
+/resume
+/clear
+```
+
+To install and select Gemma locally:
+
+```bash
+docker exec aegis-ollama ollama pull gemma:7b
+aegis models select gemma:7b
+```
+
+Longer local generations can be tuned with `AEGIS_QUERY_TIMEOUT_MS`, `AEGIS_OLLAMA_GENERATE_TIMEOUT_MS`, `AEGIS_OLLAMA_NUM_PREDICT`, `AEGIS_OLLAMA_NUM_CTX`, `OLLAMA_GENERATE_TIMEOUT_SECONDS`, `OLLAMA_NUM_PREDICT`, or `OLLAMA_NUM_CTX`.
+
 ## Air-gap bundle flow
 
 - `node apps/cli/dist/index.js bundle create`

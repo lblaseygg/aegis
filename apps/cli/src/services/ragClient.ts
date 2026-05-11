@@ -4,11 +4,14 @@ import { DEFAULT_RAG_API_URL } from "../lib/constants.js";
 import type { AuditEvent } from "../types/audit.js";
 import type { CollectionSummary, HealthStatus, IngestSummary, QueryResponse } from "../types/rag.js";
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_QUERY_TIMEOUT_MS = 180_000;
+
 export class RagClient {
   private readonly http: AxiosInstance;
 
   constructor(baseURL = DEFAULT_RAG_API_URL) {
-    this.http = axios.create({ baseURL, timeout: 30_000 });
+    this.http = axios.create({ baseURL, timeout: DEFAULT_REQUEST_TIMEOUT_MS });
   }
 
   async health(): Promise<HealthStatus> {
@@ -32,6 +35,8 @@ export class RagClient {
       collection,
       model,
       top_k: topK,
+    }, {
+      timeout: Number(process.env.AEGIS_QUERY_TIMEOUT_MS ?? DEFAULT_QUERY_TIMEOUT_MS),
     });
     return response.data;
   }
