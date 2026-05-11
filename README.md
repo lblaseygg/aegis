@@ -23,6 +23,15 @@ The repository is structured as a greenfield MVP that tracks the build plan in [
 5. `node apps/cli/dist/index.js init`
 6. `node apps/cli/dist/index.js doctor`
 
+## Install The `aegis` Command
+
+To make `aegis` available directly in your terminal:
+
+```bash
+npm run install:cli
+aegis --help
+```
+
 ## Air-gap bundle flow
 
 - `node apps/cli/dist/index.js bundle create`
