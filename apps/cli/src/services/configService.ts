@@ -5,10 +5,8 @@ import YAML from "yaml";
 
 import type { AegisConfig } from "../types/config.js";
 import { validateConfig } from "../lib/validators.js";
-import { DEFAULT_CONFIG_PATH, ROOT_DIR } from "../lib/constants.js";
+import { DEFAULT_CONFIG_PATH, DEFAULT_CONFIG_SOURCE } from "../lib/constants.js";
 import { RuntimeService, type RuntimeMode } from "./runtimeService.js";
-
-const DEFAULT_CONFIG_SOURCE = path.resolve(ROOT_DIR, "config/default.yaml");
 
 export class ConfigService {
   private readonly runtimeService: RuntimeService;

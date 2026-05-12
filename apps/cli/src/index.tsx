@@ -10,12 +10,14 @@ import { runChat } from "./commands/chat.js";
 import { runDoctor } from "./commands/doctor.js";
 import { runDown } from "./commands/down.js";
 import { runInit } from "./commands/init.js";
+import { runInstall } from "./commands/install.js";
 import { runLogsTail } from "./commands/logs.js";
 import { runModelsList, runModelsSelect } from "./commands/models.js";
 import { runIngest, runQuery } from "./commands/rag.js";
 import { runRuntimeStatus, runRuntimeUse } from "./commands/runtime.js";
 import { runUp } from "./commands/up.js";
 import { APP_NAME } from "./lib/constants.js";
+import { BootstrapService } from "./services/bootstrapService.js";
 import { ConfigService } from "./services/configService.js";
 import { OllamaClient } from "./services/ollamaClient.js";
 import { RagClient } from "./services/ragClient.js";
@@ -45,6 +47,13 @@ program
   .name("aegis")
   .description(APP_NAME)
   .version("0.1.0");
+
+program
+  .command("install")
+  .description("Install or refresh the packaged local runtime under Application Support")
+  .action(async () => {
+    await runInstall();
+  });
 
 program
   .command("init")
@@ -181,7 +190,14 @@ bundle
   });
 
 async function main(): Promise<void> {
-  if (process.argv.slice(2).length === 0) {
+  const bootstrap = new BootstrapService();
+  const args = process.argv.slice(2);
+
+  if (args[0] !== "install" && !args.includes("--help") && !args.includes("-h") && !args.includes("--version") && !args.includes("-V")) {
+    await bootstrap.ensureReady();
+  }
+
+  if (args.length === 0) {
     await runChat();
     return;
   }

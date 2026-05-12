@@ -32,6 +32,45 @@ npm run install:cli
 aegis
 ```
 
+## npm Bootstrap Distribution
+
+The CLI workspace is now shaped to be publishable as a thin npm package named `aegis`.
+
+User flow:
+
+1. `npm install -g aegis`
+2. `aegis`
+
+On packaged macOS installs, the first run bootstraps the native runtime under:
+
+`~/Library/Application Support/Aegis`
+
+That runtime bootstrap:
+
+- extracts a prebuilt local runtime bundle
+- writes the default config and audit directories
+- installs and starts launch agents for Ollama and the RAG API
+- imports an optional bundled model store if one exists
+
+The published npm package does not embed the heavy runtime payload directly. Instead, the package expects one of these environment variables on first run:
+
+- `AEGIS_BOOTSTRAP_BUNDLE_PATH`
+- `AEGIS_BOOTSTRAP_BUNDLE_URL`
+
+You can also trigger the bootstrap explicitly:
+
+```bash
+aegis install
+```
+
+To build the runtime bundle artifact that the npm package consumes:
+
+```bash
+npm run build:runtime-bundle
+```
+
+That produces a tarball under `build/macos/` that can be attached to a release or hosted for the bootstrapper.
+
 ## macOS Package
 
 The repo now includes a macOS packaging pipeline that builds:
