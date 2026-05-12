@@ -27,7 +27,8 @@ That bootstrap step:
 - installs the default config if one does not exist
 - installs a user PATH snippet for `~/Library/Application Support/Aegis/bin`
 - creates and loads launch agents for Ollama and the RAG API
-- imports a bundled model store if one is present
+- imports the bundled default model store if one is present
+- copies any optional bundled model packs into the local support directory
 - waits for both services to become ready
 
 After that, the user flow is:
@@ -47,7 +48,9 @@ The build expects:
 Optional:
 
 - `AEGIS_BUNDLED_MODEL_STORE`
-  Path to a tarball produced by [export-ollama-models.sh](/Users/blasey/Developer/aegis/scripts/export-ollama-models.sh)
+  Path to the default bundled model-store tarball produced by [export-ollama-models.sh](/Users/blasey/Developer/aegis/scripts/export-ollama-models.sh). For the recommended default, this should contain `gemma3:4b`.
+- `AEGIS_OPTIONAL_MODEL_PACKS`
+  Comma-separated named optional pack archives in the format `name=/absolute/path/archive.tar.gz`. For example: `gemma3-12b=/absolute/path/gemma3-12b-model-store.tar.gz`
 - `AEGIS_CODESIGN_IDENTITY`
   Developer ID identity for signing `Aegis.app`
 - `AEGIS_INSTALLER_SIGN_IDENTITY`
@@ -71,10 +74,25 @@ Example signed build:
 
 ```bash
 AEGIS_OLLAMA_APP_SOURCE="/Applications/Ollama.app" \
-AEGIS_BUNDLED_MODEL_STORE="/absolute/path/ollama-model-store.tar.gz" \
+AEGIS_BUNDLED_MODEL_STORE="/absolute/path/gemma3-4b-model-store.tar.gz" \
+AEGIS_OPTIONAL_MODEL_PACKS="gemma3-12b=/absolute/path/gemma3-12b-model-store.tar.gz" \
 AEGIS_CODESIGN_IDENTITY="Developer ID Application: Example Corp (TEAMID)" \
 AEGIS_INSTALLER_SIGN_IDENTITY="Developer ID Installer: Example Corp (TEAMID)" \
 npm run build:macos-pkg
+```
+
+## Model Strategy
+
+The macOS package now assumes:
+
+- `gemma3:4b` is the preinstalled default model
+- `gemma3:12b` is shipped only as an optional model-pack archive
+
+After install, operators can import optional packs with:
+
+```bash
+aegis models packs
+aegis models install-pack gemma3-12b --select gemma3:12b
 ```
 
 Artifacts are written under `build/macos/`.

@@ -57,7 +57,13 @@ mkdir -p \
   "${RUNTIME_DIR}"
 
 printf 'Installing embedded runtimes and services...\n'
-rsync -a --delete "${PAYLOAD_DIR}/runtime/" "${RUNTIME_DIR}/"
+rsync -a --delete --exclude 'ollama/Ollama.app' "${PAYLOAD_DIR}/runtime/" "${RUNTIME_DIR}/"
+
+if [[ -d "${PAYLOAD_DIR}/runtime/ollama/Ollama.app" ]]; then
+  rm -rf "${RUNTIME_DIR}/ollama/Ollama.app"
+  mkdir -p "${RUNTIME_DIR}/ollama"
+  ditto "${PAYLOAD_DIR}/runtime/ollama/Ollama.app" "${RUNTIME_DIR}/ollama/Ollama.app"
+fi
 
 if [[ -d "${PAYLOAD_DIR}/models" ]]; then
   mkdir -p "${SUPPORT_DIR}/models"

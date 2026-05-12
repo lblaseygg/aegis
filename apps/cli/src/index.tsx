@@ -11,7 +11,7 @@ import { runDoctor } from "./commands/doctor.js";
 import { runDown } from "./commands/down.js";
 import { runInit } from "./commands/init.js";
 import { runLogsTail } from "./commands/logs.js";
-import { runModelsList, runModelsSelect } from "./commands/models.js";
+import { runModelPackInstall, runModelPacksList, runModelsList, runModelsSelect } from "./commands/models.js";
 import { runIngest, runQuery } from "./commands/rag.js";
 import { runRuntimeStatus, runRuntimeUse } from "./commands/runtime.js";
 import { runUp } from "./commands/up.js";
@@ -103,6 +103,22 @@ models
   .description("Select the active model in local config")
   .action(async (model: string) => {
     await runModelsSelect(model);
+  });
+
+models
+  .command("packs")
+  .description("List bundled optional model packs")
+  .action(async () => {
+    await runModelPacksList();
+  });
+
+models
+  .command("install-pack")
+  .argument("<name>", "Bundled model pack name")
+  .option("-s, --select <model>", "Select a model after importing the pack")
+  .description("Import a bundled optional model pack into the local Ollama store")
+  .action(async (name: string, options: { select?: string }) => {
+    await runModelPackInstall(name, options);
   });
 
 const rag = program.command("rag").description("Operate the local retrieval pipeline");

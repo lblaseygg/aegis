@@ -14,6 +14,7 @@ fi
 export AEGIS_CONFIG_PATH="${SUPPORT_DIR}/data/config/config.yaml"
 export AEGIS_AUDIT_LOG_PATH="${SUPPORT_DIR}/data/audit/audit.jsonl"
 export AEGIS_STATE_DIR="${SUPPORT_DIR}/state"
+export AEGIS_ROOT_DIR="${SUPPORT_DIR}/runtime"
 export OLLAMA_BASE_URL="http://127.0.0.1:11434"
 export RAG_API_BASE_URL="http://127.0.0.1:8088"
 export PATH="${SUPPORT_DIR}/bin:${PATH}"

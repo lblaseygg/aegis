@@ -57,7 +57,8 @@ PYTHON_VERSION="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.
 SITE_PACKAGES_DIR="${ROOT_DIR}/.venv/lib/python${PYTHON_VERSION}/site-packages"
 OLLAMA_APP_SOURCE="${AEGIS_OLLAMA_APP_SOURCE:-/Applications/Ollama.app}"
 MODEL_STORE_ARCHIVE="${AEGIS_BUNDLED_MODEL_STORE:-}"
-DEFAULT_MODEL="${AEGIS_DEFAULT_MODEL:-llama3.2:3b}"
+DEFAULT_MODEL="${AEGIS_DEFAULT_MODEL:-gemma3:4b}"
+OPTIONAL_MODEL_PACKS="${AEGIS_OPTIONAL_MODEL_PACKS:-}"
 APP_SIGN_IDENTITY="${AEGIS_CODESIGN_IDENTITY:-}"
 PKG_SIGN_IDENTITY="${AEGIS_INSTALLER_SIGN_IDENTITY:-}"
 
@@ -84,6 +85,7 @@ chmod +x "${APP_BUNDLE}/Contents/MacOS/aegis"
 printf 'Staging embedded runtime payload...\n'
 mkdir -p \
   "${PAYLOAD_DIR}/runtime/apps/cli" \
+  "${PAYLOAD_DIR}/runtime/config" \
   "${PAYLOAD_DIR}/runtime/rag-api" \
   "${PAYLOAD_DIR}/runtime/ollama" \
   "${PAYLOAD_DIR}/runtime/python" \
@@ -93,6 +95,7 @@ mkdir -p \
 
 rsync -a "${ROOT_DIR}/apps/cli/dist/" "${PAYLOAD_DIR}/runtime/apps/cli/dist/"
 cp "${ROOT_DIR}/apps/cli/package.json" "${PAYLOAD_DIR}/runtime/apps/cli/package.json"
+rsync -a "${ROOT_DIR}/config/" "${PAYLOAD_DIR}/runtime/config/"
 rsync -a "${ROOT_DIR}/node_modules/" "${PAYLOAD_DIR}/runtime/node_modules/"
 rsync -a "${NODE_PREFIX}/" "${PAYLOAD_DIR}/runtime/node/"
 rsync -a "${ROOT_DIR}/apps/rag-api/app/" "${PAYLOAD_DIR}/runtime/rag-api/app/"
@@ -108,7 +111,7 @@ import sys
 config_path = Path(sys.argv[1])
 model = sys.argv[2]
 text = config_path.read_text()
-config_path.write_text(text.replace("model: llama3.2:3b", f"model: {model}"))
+config_path.write_text(text.replace("model: gemma3:4b", f"model: {model}"))
 PY
 cp "${ROOT_DIR}/scripts/macos/bootstrap.sh" "${APP_BUNDLE}/Contents/Resources/bootstrap.sh"
 cp "${ROOT_DIR}/scripts/macos/lib/common.sh" "${APP_BUNDLE}/Contents/Resources/lib/common.sh"
@@ -120,6 +123,34 @@ chmod +x "${APP_BUNDLE}/Contents/Resources/bootstrap.sh"
 if [[ -n "${MODEL_STORE_ARCHIVE}" ]]; then
   mkdir -p "${PAYLOAD_DIR}/models"
   cp "${MODEL_STORE_ARCHIVE}" "${PAYLOAD_DIR}/models/default-model-store.tar.gz"
+fi
+
+if [[ -n "${OPTIONAL_MODEL_PACKS}" ]]; then
+  mkdir -p "${PAYLOAD_DIR}/models/packs"
+  OLDIFS="$IFS"
+  IFS=','
+  read -ra PACK_ENTRIES <<<"${OPTIONAL_MODEL_PACKS}"
+  IFS="$OLDIFS"
+
+  for entry in "${PACK_ENTRIES[@]}"; do
+    [[ -z "${entry}" ]] && continue
+
+    if [[ "${entry}" != *=* ]]; then
+      printf 'Invalid optional model pack entry: %s\n' "${entry}" >&2
+      printf 'Expected format: name=/absolute/path/to/model-pack.tar.gz\n' >&2
+      exit 1
+    fi
+
+    pack_name="${entry%%=*}"
+    pack_path="${entry#*=}"
+
+    if [[ ! -f "${pack_path}" ]]; then
+      printf 'Optional model pack archive not found: %s\n' "${pack_path}" >&2
+      exit 1
+    fi
+
+    cp "${pack_path}" "${PAYLOAD_DIR}/models/packs/${pack_name}.tar.gz"
+  done
 fi
 
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" "${APP_BUNDLE}/Contents/Info.plist"

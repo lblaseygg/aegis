@@ -1,3 +1,21 @@
+export interface SlashCommandDefinition {
+  name: string;
+  usage: string;
+  description: string;
+}
+
+export const SLASH_COMMANDS: SlashCommandDefinition[] = [
+  { name: "help", usage: "/help", description: "Show the available slash commands." },
+  { name: "mode", usage: "/mode docs|code", description: "Switch between docs mode and code mode." },
+  { name: "model", usage: "/model [name]", description: "Show the active model or switch to an installed one." },
+  { name: "collection", usage: "/collection [name]", description: "Show or change the active document collection." },
+  { name: "review", usage: "/review [off]", description: "Enable review mode or return to normal code chat." },
+  { name: "cwd", usage: "/cwd [path]", description: "Show or change the current workspace directory." },
+  { name: "files", usage: "/files", description: "List the current workspace files." },
+  { name: "resume", usage: "/resume", description: "Resume the saved session for this workspace." },
+  { name: "clear", usage: "/clear", description: "Clear the current chat history." },
+];
+
 export type ParsedSlashCommand =
   | { type: "help" }
   | { type: "mode"; mode?: "docs" | "code" }
@@ -9,6 +27,20 @@ export type ParsedSlashCommand =
   | { type: "clear" }
   | { type: "collection"; collection?: string }
   | { type: "unknown"; command: string };
+
+export function matchSlashCommands(input: string): SlashCommandDefinition[] {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("/")) {
+    return [];
+  }
+
+  const query = trimmed.slice(1).split(/\s+/)[0]?.toLowerCase() ?? "";
+  if (!query) {
+    return SLASH_COMMANDS;
+  }
+
+  return SLASH_COMMANDS.filter((command) => command.name.startsWith(query));
+}
 
 export function parseSlashCommand(input: string): ParsedSlashCommand | null {
   const trimmed = input.trim();

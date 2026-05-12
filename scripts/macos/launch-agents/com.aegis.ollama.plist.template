@@ -13,7 +13,6 @@
   <key>ProgramArguments</key>
   <array>
     <string>__OLLAMA_BIN__</string>
-    <string>serve</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>

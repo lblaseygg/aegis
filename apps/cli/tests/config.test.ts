@@ -12,7 +12,7 @@ describe("validateConfig", () => {
       },
       runtime: {
         mode: "docker",
-        model: "llama3.2:3b",
+        model: "gemma3:4b",
         collection: "default",
         embedding_provider: "hash",
       },
@@ -35,7 +35,7 @@ describe("validateConfig", () => {
       },
     });
 
-    expect(config.runtime.model).toBe("llama3.2:3b");
+    expect(config.runtime.model).toBe("gemma3:4b");
   });
 
   test("rejects non-local offline endpoints", () => {
@@ -48,7 +48,7 @@ describe("validateConfig", () => {
         },
         runtime: {
           mode: "docker",
-          model: "llama3.2:3b",
+          model: "gemma3:4b",
           collection: "default",
           embedding_provider: "hash",
         },
@@ -82,7 +82,7 @@ describe("validateConfig", () => {
       },
       runtime: {
         mode: "native",
-        model: "llama3.2:3b",
+        model: "gemma3:4b",
         collection: "default",
         embedding_provider: "hash",
       },

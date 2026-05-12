@@ -36,7 +36,7 @@ describe("RuntimeService", () => {
         },
         runtime: {
           mode: "native",
-          model: "llama3.2:3b",
+          model: "gemma3:4b",
           collection: "default",
           embedding_provider: "hash",
         },

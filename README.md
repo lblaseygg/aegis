@@ -54,7 +54,8 @@ That first-run setup:
 - installs the embedded CLI, RAG API, Python runtime, and bundled native Ollama runtime
 - starts Ollama and the RAG API as user launch agents
 - writes an Aegis shell PATH entry for future sessions
-- imports an optional bundled model store
+- imports the bundled default model store
+- exposes any optional bundled model packs for later install
 
 Build commands:
 
@@ -93,7 +94,7 @@ On macOS, the recommended setup is:
 Example:
 
 ```bash
-ollama pull llama3.2:3b
+ollama pull gemma3:4b
 aegis runtime use native
 aegis up
 aegis doctor
@@ -113,7 +114,7 @@ Useful slash commands inside chat:
 ```text
 /mode docs
 /mode code
-/model gemma:7b
+/model gemma3:4b
 /collection default
 /review
 /review off
@@ -123,11 +124,18 @@ Useful slash commands inside chat:
 /clear
 ```
 
-To install and select Gemma locally:
+To install and select the default Gemma model locally:
 
 ```bash
-ollama pull llama3.2:3b
-aegis models select llama3.2:3b
+ollama pull gemma3:4b
+aegis models select gemma3:4b
+```
+
+If the macOS package ships the optional 12B pack, you can install it later with:
+
+```bash
+aegis models packs
+aegis models install-pack gemma3-12b --select gemma3:12b
 ```
 
 Longer local generations can be tuned with `AEGIS_QUERY_TIMEOUT_MS`, `AEGIS_OLLAMA_GENERATE_TIMEOUT_MS`, `AEGIS_OLLAMA_NUM_PREDICT`, `AEGIS_OLLAMA_NUM_CTX`, `OLLAMA_GENERATE_TIMEOUT_SECONDS`, `OLLAMA_NUM_PREDICT`, or `OLLAMA_NUM_CTX`.

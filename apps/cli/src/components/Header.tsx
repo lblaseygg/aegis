@@ -1,6 +1,8 @@
 import React from "react";
 import { Box, Text } from "ink";
 
+const AEGIS_ACCENT = "#FFFFF1";
+
 interface HeaderProps {
   model: string;
   collection: string;
@@ -10,7 +12,7 @@ interface HeaderProps {
 export function Header({ model, collection, runtimeMode }: HeaderProps) {
   return (
     <Box justifyContent="space-between">
-      <Text color="cyan">Aegis</Text>
+      <Text color={AEGIS_ACCENT}>Aegis</Text>
       <Text>
         Runtime: {runtimeMode}  Model: {model}  Collection: {collection}
       </Text>

@@ -13,6 +13,31 @@ const IGNORED_SEGMENTS = new Set([
   "data",
 ]);
 
+const WORKSPACE_HINT_TERMS = [
+  "workspace",
+  "repo",
+  "repository",
+  "project",
+  "folder",
+  "directory",
+  "current folder",
+  "current directory",
+  "current workspace",
+  "scan",
+  "file",
+  "files",
+  "code",
+  "codebase",
+  "function",
+  "class",
+  "module",
+  "component",
+  "implementation",
+  "bug",
+  "test",
+  "refactor",
+];
+
 interface FileMatch {
   file: string;
   lines: number[];
@@ -39,18 +64,36 @@ export class CodeContextService {
     behavior: "chat" | "review";
     history: Array<{ role: "user" | "assistant"; text: string }>;
   }): Promise<string> {
-    const files = await this.listFiles(input.cwd, 40);
-    const relevant = await this.findRelevantFiles(input.cwd, input.question);
-    const snippets = await Promise.all(relevant.slice(0, 6).map((match) => this.readSnippet(input.cwd, match)));
     const transcript = input.history
       .slice(-6)
       .map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.text}`)
       .join("\n\n");
 
+    if (!shouldInspectWorkspace(input.question, input.behavior)) {
+      return `You are Aegis, a local chat assistant running in a terminal.
+
+Current working directory:
+${input.cwd}
+
+Recent conversation:
+${transcript || "No prior conversation."}
+
+User request:
+${input.question}
+
+Instructions:
+- Answer normally and concisely.
+- The current folder is available if the user asks about the workspace, repo, files, or code.
+- Do not claim you inspected local files unless the user explicitly asks about them.`;
+    }
+
+    const files = await this.listFiles(input.cwd, 40);
+    const relevant = await this.findRelevantFiles(input.cwd, input.question);
+    const snippets = await Promise.all(relevant.slice(0, 6).map((match) => this.readSnippet(input.cwd, match)));
     const system =
       input.behavior === "review"
         ? "You are reviewing a local codebase. Prioritize bugs, risks, regressions, and missing tests. Be concrete."
-        : "You are assisting with a local codebase. Answer using the provided workspace context and be explicit about uncertainty.";
+        : "You are assisting with a local codebase. The user explicitly asked about the workspace, so answer using the provided file context and be explicit about uncertainty.";
 
     return `${system}
 
@@ -162,6 +205,23 @@ function extractTerms(question: string): string[] {
     .match(/[a-z0-9_./-]{3,}/g)
     ?.filter((term) => !["what", "does", "have", "with", "that", "from", "this"].includes(term));
   return [...new Set(terms ?? [])].slice(0, 8);
+}
+
+export function shouldInspectWorkspace(question: string, behavior: "chat" | "review"): boolean {
+  if (behavior === "review") {
+    return true;
+  }
+
+  const normalized = question.toLowerCase();
+  if (normalized.includes("@")) {
+    return true;
+  }
+
+  if (/[./][a-z0-9_-]+/i.test(question) || question.includes("/")) {
+    return true;
+  }
+
+  return WORKSPACE_HINT_TERMS.some((term) => normalized.includes(term));
 }
 
 function isIgnored(relativePath: string): boolean {

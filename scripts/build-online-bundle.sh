@@ -99,6 +99,9 @@ main() {
 
   if [[ -d "$ROOT_DIR/models" ]]; then
     copy_tree "$ROOT_DIR/models/embeddings" "$BUNDLE_DIR/models/embeddings"
+    if [[ -d "$ROOT_DIR/models/packs" ]]; then
+      copy_tree "$ROOT_DIR/models/packs" "$BUNDLE_DIR/models/packs"
+    fi
   fi
 
   if [[ -d "$ROOT_DIR/data/ollama" ]]; then

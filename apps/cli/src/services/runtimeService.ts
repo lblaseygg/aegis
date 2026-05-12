@@ -72,7 +72,7 @@ export class RuntimeService {
       ...config,
       runtime: {
         mode,
-        model: config.runtime.model ?? "llama3.2:3b",
+        model: config.runtime.model ?? "gemma3:4b",
         collection: config.runtime.collection ?? "default",
         embedding_provider: config.runtime.embedding_provider ?? "hash",
       },

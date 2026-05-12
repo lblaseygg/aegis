@@ -1,12 +1,19 @@
 import os from "node:os";
 
-import React, { useState } from "react";
-import { Box, Text, useApp, useInput } from "ink";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { execa } from "execa";
+import { Box, Text, useApp, useInput, useStdin, useStdout } from "ink";
 import Spinner from "ink-spinner";
-import TextInput from "ink-text-input";
 
 import packageJson from "../../package.json" with { type: "json" };
-import type { ChatSessionState, ChatTurnResult } from "../types/chat.js";
+import { matchSlashCommands } from "../lib/chatCommands.js";
+import type { ChatMessage, ChatSessionState, ChatTurnResult } from "../types/chat.js";
+
+const AEGIS_ACCENT = "#FFFFF1";
+const USER_PROMPT_COLOR = "#22d3ee";
+const INPUT_PROMPT_INDENT = 2;
+const INPUT_CONTENT_INDENT = 4;
+const INPUT_BOX_INDENT = 1;
 
 const AEGIS_ASCII = `░▒▓██████▓▒░░▒▓████████▓▒░▒▓██████▓▒░░▒▓█▓▒░░▒▓███████▓▒░
 ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░     ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░
@@ -44,19 +51,186 @@ interface ChatViewProps {
   onSubmit: (value: string, session: ChatSessionState) => Promise<ChatTurnResult>;
 }
 
+interface RenderedHistoryLine {
+  id: string;
+  text: string;
+  color?: string;
+  dimColor?: boolean;
+  bold?: boolean;
+  segments?: Array<{
+    text: string;
+    color?: string;
+    dimColor?: boolean;
+    bold?: boolean;
+  }>;
+}
+
+interface FooterLineProps {
+  width: number;
+  directory: string;
+  branchLabel: string | null;
+  model: string;
+}
+
 export function ChatView({ initialSession, onSubmit }: ChatViewProps) {
   const { exit } = useApp();
+  const { stdin } = useStdin();
+  const { stdout } = useStdout();
   const [session, setSession] = useState(initialSession);
   const [input, setInput] = useState("");
+  const [cursorIndex, setCursorIndex] = useState(0);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [placeholder] = useState(() => pickPlaceholder(initialSession));
   const [launchQuote] = useState(() => pickLaunchQuote());
+  const [isTerminalFocused, setIsTerminalFocused] = useState(true);
+  const [historyLineOffset, setHistoryLineOffset] = useState(0);
+  const [branchLabel, setBranchLabel] = useState<string | null>(null);
+
+  const slashCommands = matchSlashCommands(input);
+  const historyWidth = Math.max(24, (stdout.columns ?? 80) - 2);
+  const renderedContentLines = useMemo(
+    () => [...renderHeaderLines(launchQuote, historyWidth), ...renderHistoryLines(session.history, historyWidth)],
+    [historyWidth, launchQuote, session.history],
+  );
+  const maxVisibleHistoryLines = useMemo(
+    () => estimateVisibleHistoryLines(stdout.rows ?? 24, slashCommands.length, Boolean(error), pending),
+    [error, pending, slashCommands.length, stdout.rows],
+  );
+  const maxHistoryLineOffset = Math.max(0, renderedContentLines.length - maxVisibleHistoryLines);
+  const visibleContentLines = useMemo(
+    () => sliceVisibleHistory(renderedContentLines, maxVisibleHistoryLines, historyLineOffset),
+    [historyLineOffset, maxVisibleHistoryLines, renderedContentLines],
+  );
+  const maxVisibleHistoryLinesRef = useRef(maxVisibleHistoryLines);
+  const maxHistoryLineOffsetRef = useRef(maxHistoryLineOffset);
+
+  useEffect(() => {
+    maxVisibleHistoryLinesRef.current = maxVisibleHistoryLines;
+    maxHistoryLineOffsetRef.current = maxHistoryLineOffset;
+  }, [maxHistoryLineOffset, maxVisibleHistoryLines]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadBranch = async () => {
+      const branch = await readBranchLabel(session.cwd);
+      if (!isCancelled) {
+        setBranchLabel(branch);
+      }
+    };
+
+    void loadBranch();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [session.cwd]);
+
+  useEffect(() => {
+    if (!stdout.isTTY) {
+      return;
+    }
+
+    stdout.write("\u001B[?1004h\u001B[?1000h\u001B[?1006h");
+
+    const handleData = (chunk: Buffer | string) => {
+      const value = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+      if (value.includes("\u001B[I")) {
+        setIsTerminalFocused(true);
+      }
+
+      if (value.includes("\u001B[O")) {
+        setIsTerminalFocused(false);
+      }
+
+      for (const direction of parseMouseScroll(value)) {
+        setHistoryLineOffset((current) =>
+          direction === "up"
+            ? Math.min(maxHistoryLineOffsetRef.current, current + 1)
+            : Math.max(0, current - 1),
+        );
+      }
+    };
+
+    stdin.on("data", handleData);
+
+    return () => {
+      stdin.off("data", handleData);
+      stdout.write("\u001B[?1004l\u001B[?1000l\u001B[?1006l");
+    };
+  }, [stdin, stdout]);
 
   useInput((value, key) => {
+    const isBackspace = key.backspace || key.delete || value === "\u007f" || value === "\b";
+    const isForwardDelete = value === "\u001b[3~";
+
     if (key.ctrl && value === "c") {
       exit();
+      return;
     }
+
+    if (key.return) {
+      void submit();
+      return;
+    }
+
+    if (key.pageUp) {
+      setHistoryLineOffset((current) =>
+        Math.min(maxHistoryLineOffset, current + Math.max(1, maxVisibleHistoryLines - 1)),
+      );
+      return;
+    }
+
+    if (key.pageDown) {
+      setHistoryLineOffset((current) => Math.max(0, current - Math.max(1, maxVisibleHistoryLines - 1)));
+      return;
+    }
+
+    if (key.leftArrow) {
+      setCursorIndex((current) => Math.max(0, current - 1));
+      return;
+    }
+
+    if (key.rightArrow) {
+      setCursorIndex((current) => Math.min(input.length, current + 1));
+      return;
+    }
+
+    if (key.home) {
+      setCursorIndex(0);
+      return;
+    }
+
+    if (key.end) {
+      setCursorIndex(input.length);
+      return;
+    }
+
+    if (isBackspace || isForwardDelete) {
+      if (isBackspace && cursorIndex > 0) {
+        setInput((current) => `${current.slice(0, cursorIndex - 1)}${current.slice(cursorIndex)}`);
+        setCursorIndex((current) => Math.max(0, current - 1));
+        return;
+      }
+
+      if (isForwardDelete && cursorIndex < input.length) {
+        setInput((current) => `${current.slice(0, cursorIndex)}${current.slice(cursorIndex + 1)}`);
+        return;
+      }
+    }
+
+    if (!value || key.ctrl || key.meta || key.escape || key.tab) {
+      return;
+    }
+
+    const sanitizedValue = stripTerminalArtifacts(value);
+    if (!sanitizedValue) {
+      return;
+    }
+
+    setInput((current) => `${current.slice(0, cursorIndex)}${sanitizedValue}${current.slice(cursorIndex)}`);
+    setCursorIndex((current) => current + sanitizedValue.length);
   });
 
   const submit = async () => {
@@ -68,6 +242,8 @@ export function ChatView({ initialSession, onSubmit }: ChatViewProps) {
     setPending(true);
     setError(null);
     setInput("");
+    setCursorIndex(0);
+    setHistoryLineOffset(0);
 
     try {
       const response = await onSubmit(trimmed, session);
@@ -80,75 +256,271 @@ export function ChatView({ initialSession, onSubmit }: ChatViewProps) {
   };
 
   return (
-    <Box flexDirection="column" height="100%">
-      <Box flexShrink={0} flexDirection="column">
-        <Text color="white">{AEGIS_ASCII}</Text>
-        <Box
-          borderStyle="round"
-          borderColor="white"
-          flexDirection="column"
-          alignSelf="flex-start"
-          marginTop={1}
-          paddingX={1}
-        >
-          <Box>
-            <Text dimColor>{">_"}</Text>
-            <Text bold color="white">
-              {" Aegis "}
-            </Text>
-            <Text dimColor>({packageJson.version})</Text>
-          </Box>
-          <Text dimColor>"{launchQuote.text}"</Text>
-          <Text dimColor>— {launchQuote.author}</Text>
-        </Box>
+    <Box flexDirection="column">
+      <Box flexDirection="column" marginTop={1}>
+        {visibleContentLines.map((line) => (
+          <Text key={line.id} color={line.color} dimColor={line.dimColor} bold={line.bold}>
+            {line.segments
+              ? line.segments.map((segment, index) => (
+                  <Text
+                    key={`${line.id}-segment-${index}`}
+                    color={segment.color}
+                    dimColor={segment.dimColor}
+                    bold={segment.bold}
+                  >
+                    {segment.text}
+                  </Text>
+                ))
+              : (line.text || " ")}
+          </Text>
+        ))}
       </Box>
-      <Box flexDirection="column" flexGrow={1} justifyContent="flex-end" marginTop={1} overflow="hidden">
-        <Box flexDirection="column">
-          {session.history.map((message, index) => (
-            <Box key={`${message.role}-${index}`} flexDirection="column" marginBottom={1}>
-              <Text color={message.role === "user" ? "yellow" : "green"}>
-                {message.role === "user" ? "You" : "Assistant"}
-              </Text>
-              <Text>{message.text}</Text>
-            </Box>
+
+      {error ? <Text color="red">{error}</Text> : null}
+
+      {slashCommands.length > 0 ? (
+        <Box flexDirection="column" flexShrink={0} marginTop={0} paddingLeft={INPUT_CONTENT_INDENT}>
+          {slashCommands.map((command) => (
+            <Text key={command.name} dimColor>
+              {command.usage}  —  {command.description}
+            </Text>
           ))}
         </Box>
-      </Box>
-      {error ? <Text color="red">{error}</Text> : null}
+      ) : null}
+
       <Box
         borderStyle="round"
-        borderColor="white"
+        borderColor={AEGIS_ACCENT}
+        borderDimColor={!isTerminalFocused}
         flexDirection="column"
         flexShrink={0}
-        marginTop={1}
+        marginTop={0}
         paddingX={1}
         paddingY={0}
       >
         <Box>
-          <Text color="yellow">{"> "}</Text>
-          <TextInput
-            value={input}
-            placeholder={placeholder}
-            onChange={setInput}
-            onSubmit={() => {
-              void submit();
-            }}
-          />
+          <Text color={isTerminalFocused ? "yellow" : AEGIS_ACCENT} dimColor={!isTerminalFocused}>
+            {"> "}
+          </Text>
+          {renderInputContent(input, cursorIndex, placeholder, isTerminalFocused)}
         </Box>
       </Box>
-      <Box flexShrink={0} marginTop={0} paddingLeft={3}>
+
+      <Box flexDirection="column" flexShrink={0} marginTop={0} paddingLeft={INPUT_BOX_INDENT}>
         {pending ? (
           <Text color="cyan">
-            <Spinner type="dots" /> Resolving local context...
+            <Spinner type="dots" /> Working...
           </Text>
-        ) : (
-          <Text dimColor>
-            {session.model}  |  {formatWorkspacePath(session.cwd)}
-          </Text>
-        )}
+        ) : null}
+        <FooterLine
+          width={Math.max(24, (stdout.columns ?? 80) - INPUT_BOX_INDENT)}
+          directory={formatWorkspacePath(session.cwd)}
+          branchLabel={branchLabel}
+          model={session.model}
+        />
       </Box>
     </Box>
   );
+}
+
+function FooterLine({ width, directory, branchLabel, model }: FooterLineProps) {
+  const branchSuffix = branchLabel ? ` (${branchLabel})` : "";
+  const maxLeftWidth = Math.max(12, Math.floor(width * 0.45));
+  const clippedDirectory = truncateText(
+    directory,
+    branchSuffix.length > 0 ? Math.max(4, maxLeftWidth - branchSuffix.length) : maxLeftWidth,
+  );
+  const leftDisplay = `${clippedDirectory}${branchSuffix}`;
+  const leftWidth = visualWidth(leftDisplay);
+
+  return (
+    <Box width={width}>
+      <Box width={leftWidth}>
+        <Text>{clippedDirectory}</Text>
+        {branchLabel ? <Text dimColor>{branchSuffix}</Text> : null}
+      </Box>
+      <Box flexGrow={1} justifyContent="center">
+        <Text dimColor>{model}</Text>
+      </Box>
+      <Box width={leftWidth}>
+        <Text>{" ".repeat(leftWidth)}</Text>
+      </Box>
+    </Box>
+  );
+}
+
+function renderHistoryLines(history: ChatMessage[], width: number): RenderedHistoryLine[] {
+  return history.flatMap((message, index) => renderMessageLines(message, index, width));
+}
+
+function renderHeaderLines(
+  launchQuote: (typeof LAUNCH_QUOTES)[number],
+  width: number,
+): RenderedHistoryLine[] {
+  const innerWidth = Math.max(24, Math.min(60, width - 4));
+  const quoteLines = wrapText(`"${launchQuote.text}"`, innerWidth);
+  const authorLines = wrapText(`— ${launchQuote.author}`, innerWidth);
+  const boxTop = `╭${"─".repeat(innerWidth + 2)}╮`;
+  const boxBottom = `╰${"─".repeat(innerWidth + 2)}╯`;
+
+  return [
+    ...AEGIS_ASCII.split("\n").map((line, index) => ({
+      id: `header-ascii-${index}`,
+      text: line,
+      color: AEGIS_ACCENT,
+    })),
+    { id: "header-spacer-0", text: "" },
+    { id: "header-box-top", text: boxTop, color: AEGIS_ACCENT },
+    {
+      id: "header-box-title",
+      text: "",
+      segments: [
+        { text: "│ ", color: AEGIS_ACCENT },
+        { text: ">_ ", color: AEGIS_ACCENT, dimColor: true },
+        { text: "Aegis", color: AEGIS_ACCENT, bold: true },
+        { text: ` (${packageJson.version})`, color: AEGIS_ACCENT, dimColor: true },
+        {
+          text: `${" ".repeat(Math.max(0, innerWidth - visualWidth(`>_ Aegis (${packageJson.version})`)))} │`,
+          color: AEGIS_ACCENT,
+        },
+      ],
+    },
+    ...quoteLines.map((line, index) => ({
+      id: `header-box-quote-${index}`,
+      text: "",
+      segments: [
+        { text: "│ ", color: AEGIS_ACCENT },
+        { text: line.padEnd(innerWidth, " "), color: AEGIS_ACCENT, dimColor: true },
+        { text: " │", color: AEGIS_ACCENT },
+      ],
+    })),
+    ...authorLines.map((line, index) => ({
+      id: `header-box-author-${index}`,
+      text: "",
+      segments: [
+        { text: "│ ", color: AEGIS_ACCENT },
+        { text: line.padEnd(innerWidth, " "), color: AEGIS_ACCENT, dimColor: true },
+        { text: " │", color: AEGIS_ACCENT },
+      ],
+    })),
+    { id: "header-box-bottom", text: boxBottom, color: AEGIS_ACCENT },
+    { id: "header-spacer-1", text: "" },
+  ];
+}
+
+function renderMessageLines(message: ChatMessage, index: number, width: number): RenderedHistoryLine[] {
+  if (message.role === "system" && message.variant === "help") {
+    return renderHelpBoxLines(message, index, width);
+  }
+
+  if (message.role === "system") {
+    return [
+      ...wrapText(message.text, width).map((line, lineIndex) => ({
+        id: `history-${index}-system-${lineIndex}`,
+        text: line,
+        dimColor: true,
+      })),
+      {
+        id: `history-${index}-system-spacer`,
+        text: "",
+      },
+    ];
+  }
+
+  const labelColor = message.role === "user" ? USER_PROMPT_COLOR : "green";
+
+  if (message.role === "user") {
+    const wrappedBody = wrapText(message.text, Math.max(4, width - 2));
+    return [
+      ...wrappedBody.map((line, lineIndex) => ({
+        id: `history-${index}-body-${lineIndex}`,
+        text: `${lineIndex === 0 ? "> " : "  "}${line}`,
+        color: labelColor,
+      })),
+      {
+        id: `history-${index}-spacer`,
+        text: "",
+      },
+    ];
+  }
+
+  return [
+    ...wrapText(message.text, Math.max(4, width - 2)).map((line, lineIndex) => ({
+      id: `history-${index}-body-${lineIndex}`,
+      text: `${lineIndex === 0 ? "> " : "  "}${line}`,
+      color: labelColor,
+    })),
+    {
+      id: `history-${index}-spacer`,
+      text: "",
+    },
+  ];
+}
+
+function renderHelpBoxLines(message: ChatMessage, index: number, width: number): RenderedHistoryLine[] {
+  const header = "Commands:";
+  const maxInnerWidth = Math.max(16, width - 4);
+  const wrappedLines = [header, ...message.text.split("\n")].flatMap((line) => wrapText(line, maxInnerWidth));
+  const innerWidth = Math.max(...wrappedLines.map((line) => visualWidth(line)), visualWidth(header));
+  const top = `╭${"─".repeat(innerWidth + 2)}╮`;
+  const bottom = `╰${"─".repeat(innerWidth + 2)}╯`;
+
+  return [
+    { id: `history-${index}-help-top`, text: top, color: AEGIS_ACCENT },
+    ...wrappedLines.map((line, lineIndex) => ({
+      id: `history-${index}-help-${lineIndex}`,
+      text: `│ ${line.padEnd(innerWidth, " ")} │`,
+      color: lineIndex === 0 ? "white" : undefined,
+      bold: lineIndex === 0,
+    })),
+    { id: `history-${index}-help-bottom`, text: bottom, color: AEGIS_ACCENT },
+    { id: `history-${index}-help-spacer`, text: "" },
+  ];
+}
+
+function wrapText(text: string, width: number): string[] {
+  const paragraphs = text.split("\n");
+  const lines: string[] = [];
+
+  for (const paragraph of paragraphs) {
+    if (!paragraph) {
+      lines.push("");
+      continue;
+    }
+
+    let current = "";
+    for (const word of paragraph.split(/\s+/)) {
+      if (!word) {
+        continue;
+      }
+
+      if (visualWidth(word) > width) {
+        if (current) {
+          lines.push(current);
+          current = "";
+        }
+
+        const chunks = chunkText(word, width);
+        lines.push(...chunks.slice(0, -1));
+        current = chunks.at(-1) ?? "";
+        continue;
+      }
+
+      const next = current ? `${current} ${word}` : word;
+      if (visualWidth(next) <= width) {
+        current = next;
+      } else {
+        lines.push(current);
+        current = word;
+      }
+    }
+
+    if (current) {
+      lines.push(current);
+    }
+  }
+
+  return lines.length > 0 ? lines : [""];
 }
 
 function pickPlaceholder(session: ChatSessionState): string {
@@ -175,4 +547,112 @@ function formatWorkspacePath(cwd: string): string {
 
 function pickLaunchQuote(): (typeof LAUNCH_QUOTES)[number] {
   return LAUNCH_QUOTES[Math.floor(Math.random() * LAUNCH_QUOTES.length)] ?? LAUNCH_QUOTES[0];
+}
+
+function stripTerminalArtifacts(value: string): string {
+  return value
+    .replace(/\u001b\[[IO0]/g, "")
+    .replace(/\[(?:I|O|0)/g, "")
+    .replace(/\u001b\[<\d+;\d+;\d+[mM]/g, "")
+    .replace(/\[<\d+;\d+;\d+[mM]/g, "");
+}
+
+function estimateVisibleHistoryLines(
+  rows: number,
+  slashCommandCount: number,
+  hasError: boolean,
+  pending: boolean,
+): number {
+  const reservedRows = 5 + slashCommandCount + (hasError ? 1 : 0) + (pending ? 1 : 0);
+  return Math.max(4, rows - reservedRows);
+}
+
+function renderInputContent(input: string, cursorIndex: number, placeholder: string, isTerminalFocused: boolean) {
+  const beforeCursor = input.slice(0, cursorIndex);
+  const currentCharacter = input[cursorIndex] ?? " ";
+  const afterCursor = input.slice(cursorIndex + (cursorIndex < input.length ? 1 : 0));
+
+  if (!input) {
+    return (
+      <Box>
+        <Text inverse={isTerminalFocused}> </Text>
+        <Text dimColor>{placeholder}</Text>
+      </Box>
+    );
+  }
+
+  return (
+    <Box>
+      <Text>{beforeCursor}</Text>
+      <Text inverse={isTerminalFocused}>{currentCharacter}</Text>
+      <Text>{afterCursor}</Text>
+    </Box>
+  );
+}
+
+function sliceVisibleHistory<T>(history: T[], maxVisibleLines: number, historyOffset: number): T[] {
+  const end = Math.max(0, history.length - historyOffset);
+  const start = Math.max(0, end - maxVisibleLines);
+  return history.slice(start, end);
+}
+
+function parseMouseScroll(value: string): Array<"up" | "down"> {
+  const matches = [...value.matchAll(/\u001b\[<(\d+);(\d+);(\d+)([mM])/g)];
+  return matches.flatMap((match) => {
+    const code = Number.parseInt(match[1], 10);
+    if (code === 64) {
+      return ["up"] as const;
+    }
+
+    if (code === 65) {
+      return ["down"] as const;
+    }
+
+    return [];
+  });
+}
+
+async function readBranchLabel(cwd: string): Promise<string | null> {
+  const branch = await execa("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd,
+    reject: false,
+  });
+
+  if (branch.exitCode !== 0) {
+    return null;
+  }
+
+  const status = await execa("git", ["status", "--porcelain"], {
+    cwd,
+    reject: false,
+  });
+  const isDirty = status.exitCode === 0 && status.stdout.trim().length > 0;
+  return `${branch.stdout.trim()}${isDirty ? "*" : ""}`;
+}
+
+function truncateText(value: string, width: number): string {
+  if (visualWidth(value) <= width) {
+    return value;
+  }
+
+  if (width <= 1) {
+    return "…";
+  }
+
+  return `${Array.from(value).slice(0, Math.max(0, width - 1)).join("")}…`;
+}
+
+function chunkText(value: string, width: number): string[] {
+  const characters = Array.from(value);
+  const chunks: string[] = [];
+
+  for (let index = 0; index < characters.length; index += width) {
+    chunks.push(characters.slice(index, index + width).join(""));
+  }
+
+  return chunks.length > 0 ? chunks : [""];
+}
+
+function visualWidth(value: string): number {
+  return Array.from(value).length;
 }

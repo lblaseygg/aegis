@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { SLASH_COMMANDS } from "../lib/chatCommands.js";
 import type { AegisConfig } from "../types/config.js";
 import type { ChatMessage, ChatSessionState, ChatTurnResult } from "../types/chat.js";
 import { parseSlashCommand, type ParsedSlashCommand } from "../lib/chatCommands.js";
@@ -20,15 +21,18 @@ export class ChatService {
 
   async createInitialSession(config: AegisConfig): Promise<ChatSessionState> {
     const cwd = process.cwd();
-    const defaultMode = await detectDefaultMode(cwd);
-    return this.sessionStore.load({
-      mode: defaultMode,
+    const session = await this.sessionStore.load({
+      mode: "code",
       behavior: "chat",
       model: config.runtime.model,
       collection: config.runtime.collection,
       cwd,
       history: [],
     });
+    return {
+      ...session,
+      history: [],
+    };
   }
 
   async handleInput(value: string, session: ChatSessionState): Promise<ChatTurnResult> {
@@ -37,7 +41,7 @@ export class ChatService {
       return { session };
     }
 
-    const nextSession = appendMessage(session, "user", trimmed);
+    const nextSession = appendMessage(session, { role: "user", text: trimmed });
     const command = parseSlashCommand(trimmed);
     if (command) {
       return this.handleCommand(command, nextSession);
@@ -64,7 +68,9 @@ export class ChatService {
       question: trimmed,
       model: nextSession.model,
       behavior: nextSession.behavior,
-      history: nextSession.history,
+      history: nextSession.history.filter(
+        (message): message is Extract<ChatMessage, { role: "user" | "assistant" }> => message.role !== "system",
+      ),
     });
     const answer = await this.ollamaClient.generate(nextSession.model, prompt);
     nextSession.history.push({ role: "assistant", text: answer });
@@ -80,31 +86,24 @@ export class ChatService {
       case "help":
         return this.reply(
           session,
-          [
-            "Slash commands:",
-            "/mode docs|code",
-            "/model [name]",
-            "/collection [name]",
-            "/review",
-            "/review off",
-            "/cwd [path]",
-            "/files",
-            "/resume",
-            "/clear",
-          ].join("\n"),
+          SLASH_COMMANDS.map((commandDefinition) => `${commandDefinition.usage} — ${commandDefinition.description}`).join(
+            "\n",
+          ),
+          "system",
+          "help",
         );
       case "mode":
         if (!command.mode) {
-          return this.reply(session, `Current mode: ${session.mode}`);
+          return this.reply(session, `Current mode: ${session.mode}`, "system");
         }
 
         session.mode = command.mode;
-        return this.reply(session, `Switched to ${command.mode} mode.`);
+        return this.reply(session, `Switched to ${command.mode} mode.`, "system");
       case "model":
         if (!command.model) {
           const models = await this.ollamaClient.listModels();
           const available = models.map((model) => model.name).join(", ") || "none";
-          return this.reply(session, `Current model: ${session.model}\nInstalled models: ${available}`);
+          return this.reply(session, `Current model: ${session.model}\nInstalled models: ${available}`, "system");
         }
 
         const models = await this.ollamaClient.listModels();
@@ -113,71 +112,78 @@ export class ChatService {
           return this.reply(
             session,
             `Model ${command.model} is not installed locally. Install it with \`ollama pull ${command.model}\`.`,
+            "system",
           );
         }
 
         session.model = command.model;
         await this.configService.selectModel(command.model);
-        return this.reply(session, `Switched model to ${command.model}.`);
+        return this.reply(session, `Switched model to ${command.model}.`, "system");
       case "resume": {
         const resumed = await this.sessionStore.resume(session.cwd, session);
-        const withNotice = appendMessage(resumed, "assistant", `Resumed session for ${resumed.cwd}.`);
+        const withNotice = appendMessage(resumed, { role: "system", text: `Resumed session for ${resumed.cwd}.` });
         await this.sessionStore.save(withNotice);
         return { session: withNotice };
       }
       case "review":
         session.mode = "code";
         session.behavior = command.enabled ? "review" : "chat";
-        return this.reply(session, command.enabled ? "Code review mode enabled." : "Returned to normal code chat mode.");
+        return this.reply(
+          session,
+          command.enabled ? "Code review mode enabled." : "Returned to normal code chat mode.",
+          "system",
+        );
       case "cwd":
         if (!command.path) {
-          return this.reply(session, `Current workspace: ${session.cwd}`);
+          return this.reply(session, `Current workspace: ${session.cwd}`, "system");
         }
 
         if (!(await isWorkspacePath(command.path))) {
-          return this.reply(session, `Path is not a readable directory: ${command.path}`);
+          return this.reply(session, `Path is not a readable directory: ${command.path}`, "system");
         }
 
         session.cwd = path.resolve(command.path);
-        return this.reply(session, `Workspace changed to ${session.cwd}`);
+        return this.reply(session, `Workspace changed to ${session.cwd}`, "system");
       case "files": {
         const files = await this.codeContextService.listFiles(session.cwd);
-        return this.reply(session, `Workspace files:\n${files.map((file) => `- ${file}`).join("\n") || "- none"}`);
+        return this.reply(session, `Workspace files:\n${files.map((file) => `- ${file}`).join("\n") || "- none"}`, "system");
       }
       case "clear": {
         const cleared = await this.sessionStore.clear(session);
         return {
-          session: appendMessage(cleared, "assistant", "Session history cleared."),
+          session: appendMessage(cleared, { role: "system", text: "Session history cleared." }),
         };
       }
       case "collection":
         if (!command.collection) {
-          return this.reply(session, `Current collection: ${session.collection}`);
+          return this.reply(session, `Current collection: ${session.collection}`, "system");
         }
 
         session.collection = command.collection;
-        return this.reply(session, `Switched collection to ${command.collection}.`);
+        return this.reply(session, `Switched collection to ${command.collection}.`, "system");
       case "unknown":
-        return this.reply(session, `Unknown slash command: /${command.command}`);
+        return this.reply(session, `Unknown slash command: /${command.command}`, "system");
     }
   }
 
-  private async reply(session: ChatSessionState, text: string): Promise<ChatTurnResult> {
-    const nextSession = appendMessage(session, "assistant", text);
+  private async reply(
+    session: ChatSessionState,
+    text: string,
+    role: ChatMessage["role"] = "assistant",
+    variant: ChatMessage["variant"] = "default",
+  ): Promise<ChatTurnResult> {
+    const nextSession = appendMessage(session, { role, text, variant });
     await this.sessionStore.save(nextSession);
     return { session: nextSession };
   }
 }
 
-async function detectDefaultMode(cwd: string): Promise<"docs" | "code"> {
-  return (await isWorkspacePath(path.join(cwd, ".git"))) || (await isWorkspacePath(path.join(cwd, "src")))
-    ? "code"
-    : "docs";
-}
-
-function appendMessage(session: ChatSessionState, role: ChatMessage["role"], text: string): ChatSessionState {
+function appendMessage(
+  session: ChatSessionState,
+  message: Pick<ChatMessage, "role" | "text"> & Partial<Pick<ChatMessage, "variant">>,
+): ChatSessionState {
   return {
     ...session,
-    history: [...session.history, { role, text }],
+    history: [...session.history, message],
   };
 }
