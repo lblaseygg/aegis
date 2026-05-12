@@ -15,9 +15,9 @@
     "build:macos-pkg": "bash scripts/macos/build-installer.sh --pkg",
     "build:runtime-bundle": "bash scripts/macos/build-runtime-bundle.sh",
     "dev:cli": "npm run dev --workspace aegis",
-    "install:cli": "npm run build --workspace aegis && npm link --workspace aegis",
+    "install:cli": "npm unlink -g @aegis/cli --silent || true && npm run build --workspace aegis && npm link --workspace aegis",
     "test": "npm run test --workspace aegis",
     "lint": "npm run lint --workspace aegis",
-    "uninstall:cli": "npm unlink -g aegis"
+    "uninstall:cli": "npm unlink -g aegis && npm unlink -g @aegis/cli --silent || true"
   }
 }
