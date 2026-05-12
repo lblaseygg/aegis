@@ -23,10 +23,24 @@ export async function runChat(): Promise<void> {
   );
   const initialSession = await chatService.createInitialSession(config);
 
-  render(
-    <ChatView
-      initialSession={initialSession}
-      onSubmit={(question, session) => chatService.handleInput(question, session)}
-    />,
-  );
+  const useAlternateScreen = process.stdout.isTTY === true;
+
+  if (useAlternateScreen) {
+    process.stdout.write("\u001B[?1049h");
+  }
+
+  try {
+    const app = render(
+      <ChatView
+        initialSession={initialSession}
+        onSubmit={(question, session) => chatService.handleInput(question, session)}
+      />,
+    );
+
+    await app.waitUntilExit();
+  } finally {
+    if (useAlternateScreen) {
+      process.stdout.write("\u001B[?1049l");
+    }
+  }
 }
