@@ -34,11 +34,11 @@ aegis
 
 ## npm Bootstrap Distribution
 
-The CLI workspace is now shaped to be publishable as a thin npm package named `aegis`.
+The CLI workspace is now shaped to be publishable as a thin npm package named `@aegis-ai/cli`.
 
 User flow:
 
-1. `npm install -g aegis`
+1. `npm install -g @aegis-ai/cli`
 2. `aegis`
 
 On packaged macOS installs, the first run bootstraps the native runtime under:
