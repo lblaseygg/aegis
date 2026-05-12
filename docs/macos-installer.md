@@ -67,25 +67,6 @@ Build the unsigned installer package:
 npm run build:macos-pkg
 ```
 
-Build the runtime bundle used by the npm bootstrap flow:
-
-```bash
-npm run build:runtime-bundle
-```
-
-That produces a tarball under `build/macos/` containing:
-
-- `runtime/`
-- `templates/default-config.yaml`
-- `launch-agents/*.plist.template`
-- `VERSION`
-- optional `models/default-model-store.tar.gz`
-
-The published `aegis` npm package can use that artifact on first run when either:
-
-- `AEGIS_BOOTSTRAP_BUNDLE_PATH` points to a local copy, or
-- `AEGIS_BOOTSTRAP_BUNDLE_URL` points to a hosted release asset
-
 Example signed build:
 
 ```bash

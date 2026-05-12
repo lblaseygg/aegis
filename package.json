@@ -10,14 +10,13 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "build": "npm run build --workspace @aegis-ai/cli",
+    "build": "npm run build --workspace @aegis/cli",
     "build:macos-app": "bash scripts/macos/build-installer.sh --app",
     "build:macos-pkg": "bash scripts/macos/build-installer.sh --pkg",
-    "build:runtime-bundle": "bash scripts/macos/build-runtime-bundle.sh",
-    "dev:cli": "npm run dev --workspace @aegis-ai/cli",
-    "install:cli": "npm unlink -g aegis --silent || true && npm unlink -g @aegis/cli --silent || true && npm run build --workspace @aegis-ai/cli && npm link --workspace @aegis-ai/cli",
-    "test": "npm run test --workspace @aegis-ai/cli",
-    "lint": "npm run lint --workspace @aegis-ai/cli",
-    "uninstall:cli": "npm unlink -g @aegis-ai/cli && npm unlink -g aegis --silent || true && npm unlink -g @aegis/cli --silent || true"
+    "dev:cli": "npm run dev --workspace @aegis/cli",
+    "install:cli": "npm run build --workspace @aegis/cli && npm link --workspace @aegis/cli",
+    "test": "npm run test --workspace @aegis/cli",
+    "lint": "npm run lint --workspace @aegis/cli",
+    "uninstall:cli": "npm unlink -g @aegis/cli"
   }
 }

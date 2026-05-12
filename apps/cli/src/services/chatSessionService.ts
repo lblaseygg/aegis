@@ -3,7 +3,7 @@ import path from "node:path";
 
 import Conf from "conf";
 
-import { IS_DEV_WORKSPACE, SUPPORT_DIR, WORKSPACE_ROOT } from "../lib/constants.js";
+import { ROOT_DIR } from "../lib/constants.js";
 import type { ChatBehavior, ChatMessage, ChatMode, ChatSessionState } from "../types/chat.js";
 
 interface StoredChatState {
@@ -19,9 +19,7 @@ export class ChatSessionService {
   private readonly store = new Conf<Record<string, StoredChatState>>({
     projectName: "aegis",
     configName: "chat-session",
-    cwd:
-      process.env.AEGIS_STATE_DIR ??
-      (IS_DEV_WORKSPACE ? path.join(WORKSPACE_ROOT, "data/config") : path.join(SUPPORT_DIR, "data/config")),
+    cwd: process.env.AEGIS_STATE_DIR ?? path.join(ROOT_DIR, "data/config"),
   });
 
   async load(defaults: Omit<ChatSessionState, "history"> & { history?: ChatMessage[] }): Promise<ChatSessionState> {
