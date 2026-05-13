@@ -6,8 +6,11 @@ services:
       - "127.0.0.1:11434:11434"
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute, utility
     volumes:
       - ./data/ollama:/root/.ollama
+    gpus: all
     restart: unless-stopped
 
   rag-api:
