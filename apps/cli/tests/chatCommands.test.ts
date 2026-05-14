@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { matchSlashCommands, parseSlashCommand } from "../src/lib/chatCommands.js";
+import { matchSlashCommands, parseSlashCommand, SLASH_COMMANDS } from "../src/lib/chatCommands.js";
 
 describe("parseSlashCommand", () => {
   test("returns null for normal chat input", () => {
@@ -33,5 +33,12 @@ describe("parseSlashCommand", () => {
     expect(matchSlashCommands("/mo").map((command) => command.name)).toEqual(["mode", "model"]);
     expect(matchSlashCommands("/a").map((command) => command.name)).toEqual(["auto"]);
     expect(matchSlashCommands("hello")).toEqual([]);
+  });
+
+  test("shows simplified usage labels without bracket placeholders", () => {
+    expect(SLASH_COMMANDS.find((command) => command.name === "model")?.usage).toBe("/model");
+    expect(SLASH_COMMANDS.find((command) => command.name === "manual")?.usage).toBe("/manual");
+    expect(SLASH_COMMANDS.find((command) => command.name === "review")?.usage).toBe("/review");
+    expect(SLASH_COMMANDS.find((command) => command.name === "cwd")?.usage).toBe("/cwd");
   });
 });

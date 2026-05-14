@@ -3,6 +3,12 @@ offline_mode: true
 network:
   ollama_base_url: http://127.0.0.1:11434
   rag_api_base_url: http://127.0.0.1:8088
+  ssh_tunnel:
+    enabled: false
+    host: ""
+    use_ssh_config_forwards: false
+    remote_ollama_url: http://127.0.0.1:11434
+    remote_rag_api_url: http://127.0.0.1:8088
 
 runtime:
   mode: local

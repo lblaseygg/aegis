@@ -46,6 +46,7 @@ describe("validateConfig", () => {
     });
 
     expect(config.runtime.model).toBe("gemma3:4b");
+    expect(config.network.ssh_tunnel.enabled).toBe(false);
   });
 
   test("rejects non-local offline endpoints", () => {

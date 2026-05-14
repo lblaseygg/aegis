@@ -76,6 +76,10 @@ export class ChatService {
         .filter(Boolean)
         .join("\n\n");
 
+      if (!parsedAnswer.answer.trim()) {
+        throw new Error("The model returned an empty response.");
+      }
+
       nextSession.history.push({ role: "assistant", text });
       await this.sessionStore.save(nextSession);
       return { session: nextSession };
@@ -91,6 +95,9 @@ export class ChatService {
       ),
     });
     const answer = await this.ollamaClient.generate(resolvedModel, prompt, onProgress);
+    if (!answer.trim()) {
+      throw new Error("The model returned an empty response.");
+    }
     nextSession.history.push({ role: "assistant", text: answer });
     await this.sessionStore.save(nextSession);
     return { session: nextSession };

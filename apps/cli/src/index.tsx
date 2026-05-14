@@ -20,11 +20,13 @@ import { APP_NAME } from "./lib/constants.js";
 import { ConfigService } from "./services/configService.js";
 import { OllamaClient } from "./services/ollamaClient.js";
 import { RagClient } from "./services/ragClient.js";
+import { SshTunnelService } from "./services/sshTunnelService.js";
 
 const program = new Command();
 
 async function runDashboard(): Promise<void> {
   const config = await new ConfigService().load();
+  await new SshTunnelService().ensureForConfig(config);
   const [ollamaStatus, ragStatus] = await Promise.all([
     new OllamaClient(config.network.ollama_base_url).health(),
     new RagClient(config.network.rag_api_base_url).health().catch(() => null),

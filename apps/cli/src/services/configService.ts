@@ -108,6 +108,10 @@ export class ConfigService {
       network: {
         ...defaults.network,
         ...raw.network,
+        ssh_tunnel: {
+          ...defaults.network.ssh_tunnel,
+          ...raw.network?.ssh_tunnel,
+        },
       },
       runtime: {
         ...defaults.runtime,

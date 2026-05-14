@@ -8,10 +8,13 @@ import { ChatService } from "../services/chatService.js";
 import { ChatSessionService } from "../services/chatSessionService.js";
 import { OllamaClient } from "../services/ollamaClient.js";
 import { RagClient } from "../services/ragClient.js";
+import { SshTunnelService } from "../services/sshTunnelService.js";
 
 export async function runChat(): Promise<void> {
   const configService = new ConfigService();
   const config = await configService.load();
+  await new SshTunnelService().ensureForConfig(config);
+  const codeContextService = new CodeContextService();
   const rag = new RagClient(config.network.rag_api_base_url);
   const ollama = new OllamaClient(config.network.ollama_base_url);
   const availableModels = await ollama.listModels().then((models) => models.map((model) => model.name)).catch(() => []);
@@ -20,7 +23,7 @@ export async function runChat(): Promise<void> {
     new ChatSessionService(),
     rag,
     ollama,
-    new CodeContextService(),
+    codeContextService,
   );
   const initialSession = await chatService.createInitialSession(config);
 
@@ -35,6 +38,7 @@ export async function runChat(): Promise<void> {
       <ChatView
         initialSession={initialSession}
         availableModels={availableModels}
+        onResolveFiles={(cwd) => codeContextService.listFiles(cwd, 200)}
         onSubmit={(question, session, onProgress) => chatService.handleInput(question, session, onProgress)}
       />,
     );

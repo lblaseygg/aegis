@@ -13,6 +13,15 @@ const configSchema = z.object({
   network: z.object({
     ollama_base_url: z.string().url(),
     rag_api_base_url: z.string().url(),
+    ssh_tunnel: z
+      .object({
+        enabled: z.boolean(),
+        host: z.string(),
+        use_ssh_config_forwards: z.boolean(),
+        remote_ollama_url: z.string().url(),
+        remote_rag_api_url: z.string().url(),
+      })
+      .optional(),
   }),
   runtime: z.object({
     mode: z.enum(["local", "remote", "docker"]),
@@ -52,13 +61,29 @@ export function validateConfig(config: unknown): AegisConfig {
   if (parsed.offline_mode) {
     localUrlSchema.parse(parsed.network.ollama_base_url);
     localUrlSchema.parse(parsed.network.rag_api_base_url);
+    if (parsed.network.ssh_tunnel?.enabled) {
+      localUrlSchema.parse(parsed.network.ssh_tunnel.remote_ollama_url);
+      localUrlSchema.parse(parsed.network.ssh_tunnel.remote_rag_api_url);
+    }
   }
 
   if (parsed.rag.chunk_overlap >= parsed.rag.chunk_size) {
     throw new ConfigError("rag.chunk_overlap must be smaller than rag.chunk_size.");
   }
 
-  return parsed;
+  return {
+    ...parsed,
+    network: {
+      ...parsed.network,
+      ssh_tunnel: {
+        enabled: parsed.network.ssh_tunnel?.enabled ?? false,
+        host: parsed.network.ssh_tunnel?.host ?? "",
+        use_ssh_config_forwards: parsed.network.ssh_tunnel?.use_ssh_config_forwards ?? false,
+        remote_ollama_url: parsed.network.ssh_tunnel?.remote_ollama_url ?? "http://127.0.0.1:11434",
+        remote_rag_api_url: parsed.network.ssh_tunnel?.remote_rag_api_url ?? "http://127.0.0.1:8088",
+      },
+    },
+  };
 }
 
 function isPermittedOfflineHost(hostname: string): boolean {

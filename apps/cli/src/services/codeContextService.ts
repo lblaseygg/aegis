@@ -88,7 +88,11 @@ Instructions:
     }
 
     const files = await this.listFiles(input.cwd, 40);
-    const relevant = await this.findRelevantFiles(input.cwd, input.question);
+    const mentionedFiles = resolveMentionedFiles(input.question, files);
+    const relevant = mergeFileMatches(
+      mentionedFiles.map((file) => ({ file, lines: [] })),
+      await this.findRelevantFiles(input.cwd, input.question),
+    );
     const snippets = await Promise.all(relevant.slice(0, 6).map((match) => this.readSnippet(input.cwd, match)));
     const system =
       input.behavior === "review"
@@ -157,6 +161,13 @@ Instructions:
     const absolutePath = path.join(cwd, match.file);
     const content = await readFile(absolutePath, "utf8");
     const allLines = content.split("\n");
+    if (match.lines.length === 0) {
+      const snippet = allLines
+        .slice(0, 12)
+        .map((line, index) => `${index + 1}: ${line}`)
+        .join("\n");
+      return `File: ${match.file}\n${snippet}`;
+    }
     const selected = new Set<number>();
     for (const lineNumber of match.lines.slice(0, 3)) {
       for (let index = Math.max(1, lineNumber - 2); index <= Math.min(allLines.length, lineNumber + 2); index += 1) {
@@ -199,12 +210,64 @@ Instructions:
   }
 }
 
+function mergeFileMatches(...groups: FileMatch[][]): FileMatch[] {
+  const merged = new Map<string, Set<number>>();
+
+  for (const group of groups) {
+    for (const match of group) {
+      const lines = merged.get(match.file) ?? new Set<number>();
+      for (const line of match.lines) {
+        lines.add(line);
+      }
+      merged.set(match.file, lines);
+    }
+  }
+
+  return [...merged.entries()].map(([file, lines]) => ({
+    file,
+    lines: [...lines].sort((left, right) => left - right),
+  }));
+}
+
 function extractTerms(question: string): string[] {
   const terms = question
     .toLowerCase()
     .match(/[a-z0-9_./-]{3,}/g)
+    ?.filter((term) => !term.startsWith("@"))
     ?.filter((term) => !["what", "does", "have", "with", "that", "from", "this"].includes(term));
   return [...new Set(terms ?? [])].slice(0, 8);
+}
+
+export function resolveMentionedFiles(question: string, files: string[]): string[] {
+  const mentions = [...question.matchAll(/@([^\s@]+)/g)]
+    .map((match) => match[1]?.trim())
+    .filter((value): value is string => Boolean(value));
+
+  if (mentions.length === 0) {
+    return [];
+  }
+
+  const normalizedFiles = files.map((file) => ({
+    file,
+    lower: file.toLowerCase(),
+    base: path.basename(file).toLowerCase(),
+  }));
+  const resolved: string[] = [];
+
+  for (const mention of mentions) {
+    const normalizedMention = mention.toLowerCase();
+    const match =
+      normalizedFiles.find((entry) => entry.lower === normalizedMention) ??
+      normalizedFiles.find((entry) => entry.lower.endsWith(`/${normalizedMention}`)) ??
+      normalizedFiles.find((entry) => entry.base === normalizedMention) ??
+      normalizedFiles.find((entry) => entry.lower.includes(normalizedMention));
+
+    if (match && !resolved.includes(match.file)) {
+      resolved.push(match.file);
+    }
+  }
+
+  return resolved;
 }
 
 export function shouldInspectWorkspace(question: string, behavior: "chat" | "review"): boolean {

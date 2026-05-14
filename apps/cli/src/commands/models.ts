@@ -10,9 +10,11 @@ import { formatBytes, formatTimestamp } from "../lib/formatters.js";
 import { ROOT_DIR } from "../lib/constants.js";
 import { ConfigService } from "../services/configService.js";
 import { OllamaClient } from "../services/ollamaClient.js";
+import { SshTunnelService } from "../services/sshTunnelService.js";
 
 export async function runModelsList(): Promise<void> {
   const config = await new ConfigService().load();
+  await new SshTunnelService().ensureForConfig(config);
   const models = await new OllamaClient(config.network.ollama_base_url).listModels();
   if (models.length === 0) {
     console.log("No Ollama models are currently available.");

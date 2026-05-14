@@ -2,9 +2,11 @@ import chalk from "chalk";
 
 import { ConfigService } from "../services/configService.js";
 import { RagClient } from "../services/ragClient.js";
+import { SshTunnelService } from "../services/sshTunnelService.js";
 
 export async function runIngest(targetPath: string, collection?: string): Promise<void> {
   const config = await new ConfigService().load();
+  await new SshTunnelService().ensureForConfig(config);
   const client = new RagClient(config.network.rag_api_base_url);
   const summary = await client.ingest(targetPath, collection ?? config.runtime.collection, true);
 
@@ -23,6 +25,7 @@ export async function runIngest(targetPath: string, collection?: string): Promis
 
 export async function runQuery(question: string, collection?: string): Promise<void> {
   const config = await new ConfigService().load();
+  await new SshTunnelService().ensureForConfig(config);
   const client = new RagClient(config.network.rag_api_base_url);
   const response = await client.query(
     question,

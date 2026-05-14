@@ -49,6 +49,7 @@ const LAUNCH_QUOTES = [
 interface ChatViewProps {
   initialSession: ChatSessionState;
   availableModels: string[];
+  onResolveFiles: (cwd: string) => Promise<string[]>;
   onSubmit: (value: string, session: ChatSessionState, onProgress?: (update: ChatProgressUpdate) => void) => Promise<ChatTurnResult>;
 }
 
@@ -79,7 +80,7 @@ interface FooterLineProps {
   model: string;
 }
 
-export function ChatView({ initialSession, availableModels, onSubmit }: ChatViewProps) {
+export function ChatView({ initialSession, availableModels, onResolveFiles, onSubmit }: ChatViewProps) {
   const { exit } = useApp();
   const { stdin } = useStdin();
   const { stdout } = useStdout();
@@ -95,8 +96,12 @@ export function ChatView({ initialSession, availableModels, onSubmit }: ChatView
   const [branchLabel, setBranchLabel] = useState<string | null>(null);
   const [completionIndex, setCompletionIndex] = useState(0);
   const [progressUpdate, setProgressUpdate] = useState<ChatProgressUpdate | null>(null);
+  const [availableFiles, setAvailableFiles] = useState<string[]>([]);
 
-  const inputSuggestions = useMemo(() => buildInputSuggestions(input, availableModels), [availableModels, input]);
+  const inputSuggestions = useMemo(
+    () => buildInputSuggestions(input, availableModels, availableFiles),
+    [availableFiles, availableModels, input],
+  );
   const historyWidth = Math.max(24, (stdout.columns ?? 80) - 2);
   const renderedContentLines = useMemo(
     () => [...renderHeaderLines(launchQuote, historyWidth), ...renderHistoryLines(session.history, historyWidth)],
@@ -129,11 +134,36 @@ export function ChatView({ initialSession, availableModels, onSubmit }: ChatView
   }, [session.cwd]);
 
   useEffect(() => {
+    let isCancelled = false;
+
+    const loadFiles = async () => {
+      try {
+        const files = await onResolveFiles(session.cwd);
+        if (!isCancelled) {
+          setAvailableFiles(files);
+        }
+      } catch {
+        if (!isCancelled) {
+          setAvailableFiles([]);
+        }
+      }
+    };
+
+    void loadFiles();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [onResolveFiles, session.cwd]);
+
+  useEffect(() => {
     if (!stdout.isTTY) {
       return;
     }
 
     stdout.write("\u001B[?1004h");
+    stdout.write("\u001B[?1000h");
+    stdout.write("\u001B[?1006h");
 
     const handleData = (chunk: Buffer | string) => {
       const value = typeof chunk === "string" ? chunk : chunk.toString("utf8");
@@ -144,15 +174,31 @@ export function ChatView({ initialSession, availableModels, onSubmit }: ChatView
       if (value.includes("\u001B[O")) {
         setIsTerminalFocused(false);
       }
+
+      const scrollEvents = parseMouseScroll(value);
+      if (scrollEvents.length === 0) {
+        return;
+      }
+
+      for (const event of scrollEvents) {
+        if (event === "up") {
+          setHistoryLineOffset((current) => Math.min(maxHistoryLineOffset, current + 3));
+          continue;
+        }
+
+        setHistoryLineOffset((current) => Math.max(0, current - 3));
+      }
     };
 
     stdin.on("data", handleData);
 
     return () => {
       stdin.off("data", handleData);
+      stdout.write("\u001B[?1006l");
+      stdout.write("\u001B[?1000l");
       stdout.write("\u001B[?1004l");
     };
-  }, [stdin, stdout]);
+  }, [maxHistoryLineOffset, stdin, stdout]);
 
   useInput((value, key) => {
     const isBackspace = key.backspace || key.delete || value === "\u007f" || value === "\b";
@@ -389,7 +435,7 @@ function formatModelLabel(session: ChatSessionState): string {
   return session.lastResolvedModel ?? session.model;
 }
 
-function buildInputSuggestions(input: string, availableModels: string[]): InputSuggestion[] {
+function buildInputSuggestions(input: string, availableModels: string[], availableFiles: string[]): InputSuggestion[] {
   const trimmed = input.trimStart();
   const modelCommandMatch = trimmed.match(/^\/(model|manual)(?:\s+(.*))?$/);
   if (modelCommandMatch) {
@@ -404,11 +450,28 @@ function buildInputSuggestions(input: string, availableModels: string[]): InputS
       }));
   }
 
+  const fileMentionMatch = input.match(/(?:^|\s)@([^\s@]*)$/);
+  if (fileMentionMatch) {
+    const query = fileMentionMatch[1]?.toLowerCase() ?? "";
+    return availableFiles
+      .filter((file) => !query || file.toLowerCase().includes(query))
+      .slice(0, 12)
+      .map((file) => ({
+        label: `@${file}`,
+        description: "",
+        completion: replaceTrailingMention(input, file),
+      }));
+  }
+
   return matchSlashCommands(input).map((command) => ({
     label: command.usage,
     description: command.description,
     completion: command.usage.replace(/\s*\[.*$/, ""),
   }));
+}
+
+function replaceTrailingMention(input: string, file: string): string {
+  return input.replace(/@([^\s@]*)$/, `@${file}`);
 }
 
 function renderHistoryLines(history: ChatMessage[], width: number): RenderedHistoryLine[] {

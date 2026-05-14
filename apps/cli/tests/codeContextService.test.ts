@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { shouldInspectWorkspace } from "../src/services/codeContextService.js";
+import { resolveMentionedFiles, shouldInspectWorkspace } from "../src/services/codeContextService.js";
 
 describe("shouldInspectWorkspace", () => {
   test("does not inspect the workspace for ordinary chat prompts", () => {
@@ -14,5 +14,14 @@ describe("shouldInspectWorkspace", () => {
 
   test("always inspects the workspace in review mode", () => {
     expect(shouldInspectWorkspace("anything", "review")).toBe(true);
+  });
+
+  test("resolves @mentions against the current workspace files", () => {
+    const files = ["README.md", "src/index.ts", "worker/worker/cli.py"];
+
+    expect(resolveMentionedFiles("Explain @README.md and @cli.py", files)).toEqual([
+      "README.md",
+      "worker/worker/cli.py",
+    ]);
   });
 });

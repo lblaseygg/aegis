@@ -102,6 +102,16 @@ export class RuntimeService {
         collection: config.runtime.collection ?? "default",
         embedding_provider: config.runtime.embedding_provider ?? "hash",
       },
+      network: {
+        ...config.network,
+        ssh_tunnel: {
+          enabled: config.network.ssh_tunnel?.enabled ?? false,
+          host: config.network.ssh_tunnel?.host ?? "",
+          use_ssh_config_forwards: config.network.ssh_tunnel?.use_ssh_config_forwards ?? false,
+          remote_ollama_url: config.network.ssh_tunnel?.remote_ollama_url ?? "http://127.0.0.1:11434",
+          remote_rag_api_url: config.network.ssh_tunnel?.remote_rag_api_url ?? "http://127.0.0.1:8088",
+        },
+      },
     };
   }
 

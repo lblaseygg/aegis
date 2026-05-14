@@ -15,6 +15,13 @@ export interface AegisConfig {
   network: {
     ollama_base_url: string;
     rag_api_base_url: string;
+    ssh_tunnel: {
+      enabled: boolean;
+      host: string;
+      use_ssh_config_forwards: boolean;
+      remote_ollama_url: string;
+      remote_rag_api_url: string;
+    };
   };
   runtime: {
     mode: RuntimeMode;

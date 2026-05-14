@@ -5,6 +5,7 @@ import { ConfigService } from "../services/configService.js";
 import { OllamaClient } from "../services/ollamaClient.js";
 import { RagClient } from "../services/ragClient.js";
 import { RuntimeService } from "../services/runtimeService.js";
+import { SshTunnelService } from "../services/sshTunnelService.js";
 import { StorageService } from "../services/storageService.js";
 
 function line(label: string, value: string): string {
@@ -13,6 +14,7 @@ function line(label: string, value: string): string {
 
 export async function runDoctor(): Promise<void> {
   const config = await new ConfigService().load();
+  await new SshTunnelService().ensureForConfig(config);
   const runtime = await new RuntimeService().inspect(config);
   const ollama = new OllamaClient(config.network.ollama_base_url);
   const rag = new RagClient(config.network.rag_api_base_url);

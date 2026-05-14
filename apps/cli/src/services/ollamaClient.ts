@@ -9,7 +9,7 @@ import type { OllamaGenerateStreamResponse, OllamaModelSummary } from "../types/
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
 const DEFAULT_GENERATE_TIMEOUT_MS = 180_000;
-const DEFAULT_GENERATE_TOKENS = 128;
+const DEFAULT_GENERATE_TOKENS = 512;
 const DEFAULT_CONTEXT_WINDOW = 2_048;
 
 interface OllamaTagsResponse {
@@ -83,7 +83,8 @@ export class OllamaClient {
       });
     }
 
-    return parseThinkingEnvelope(rawResponse).answer;
+    const parsed = parseThinkingEnvelope(rawResponse);
+    return parsed.answer || stripThinkingTags(rawResponse);
   }
 }
 
@@ -122,6 +123,10 @@ export function parseThinkingEnvelope(raw: string): { thinking: string; answer: 
   const hadThinking = raw.includes("<think>");
   return {
     thinking: thinking.trim(),
-    answer: hadThinking ? answer.replace(/^\s+/, "") : answer,
+    answer: hadThinking ? answer.replace(/^\s+/, "").trim() : answer.trim(),
   };
+}
+
+export function stripThinkingTags(raw: string): string {
+  return raw.replace(/<\/?think>/g, "").trim();
 }
