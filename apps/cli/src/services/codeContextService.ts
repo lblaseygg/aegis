@@ -84,7 +84,8 @@ ${input.question}
 Instructions:
 - Answer normally and concisely.
 - The current folder is available if the user asks about the workspace, repo, files, or code.
-- Do not claim you inspected local files unless the user explicitly asks about them.`;
+- Do not claim you inspected local files unless the user explicitly asks about them.
+- Do not append generic follow-up invitations about the working directory, workspace, or asking for more details unless the user explicitly asks for that.`;
     }
 
     const files = await this.listFiles(input.cwd, 40);
@@ -120,7 +121,8 @@ ${input.question}
 Instructions:
 - If the request is about code behavior, cite the relevant file paths.
 - If the available context is insufficient, say so plainly.
-- Do not invent files or symbols that are not present in the provided context.`;
+- Do not invent files or symbols that are not present in the provided context.
+- Do not append generic follow-up invitations about the working directory, workspace, or asking for more details unless the user explicitly asks for that.`;
   }
 
   private async findRelevantFiles(cwd: string, question: string): Promise<FileMatch[]> {

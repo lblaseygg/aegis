@@ -8,7 +8,7 @@ vi.mock("axios", () => ({
   },
 }));
 
-import { OllamaClient, parseThinkingEnvelope, stripThinkingTags } from "../src/services/ollamaClient.js";
+import { OllamaClient, parseThinkingEnvelope, sanitizeModelAnswer, stripThinkingTags } from "../src/services/ollamaClient.js";
 import axios from "axios";
 
 const createMock = vi.mocked(axios.create);
@@ -37,6 +37,14 @@ describe("parseThinkingEnvelope", () => {
 
     expect(parsed.answer).toBe("");
     expect(stripThinkingTags("<think>plan the reply\nHello there.")).toBe("plan the reply\nHello there.");
+  });
+
+  test("removes generic working-directory follow-up boilerplate", () => {
+    expect(
+      sanitizeModelAnswer(
+        "Here is the answer.\n\nIf you'd like to know more details regarding your working directory (working directory), feel free to ask!.",
+      ),
+    ).toBe("Here is the answer.");
   });
 
   test("uses a larger default token budget for generation", async () => {

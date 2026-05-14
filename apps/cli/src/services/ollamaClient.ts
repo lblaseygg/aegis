@@ -91,7 +91,7 @@ export class OllamaClient {
       }
 
       const parsed = parseThinkingEnvelope(rawResponse);
-      return parsed.answer || stripThinkingTags(rawResponse);
+      return sanitizeModelAnswer(parsed.answer || stripThinkingTags(rawResponse));
     } catch (error) {
       throw new Error(formatOllamaError(error, this.baseURL, model));
     }
@@ -139,6 +139,15 @@ export function parseThinkingEnvelope(raw: string): { thinking: string; answer: 
 
 export function stripThinkingTags(raw: string): string {
   return raw.replace(/<\/?think>/g, "").trim();
+}
+
+export function sanitizeModelAnswer(raw: string): string {
+  return raw
+    .replace(
+      /\n*\s*(?:if you'd like to know more details (?:regarding|about) your (?:working directory|workspace)(?: \((?:working directory|workspace)\))?, feel free to ask!?\.?\s*)$/i,
+      "",
+    )
+    .trim();
 }
 
 function formatOllamaError(error: unknown, baseURL: string, model?: string): string {
