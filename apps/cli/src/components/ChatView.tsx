@@ -14,6 +14,7 @@ const USER_PROMPT_COLOR = "#22d3ee";
 const INPUT_PROMPT_INDENT = 2;
 const INPUT_CONTENT_INDENT = 4;
 const INPUT_BOX_INDENT = 1;
+const SUGGESTION_ROWS = 4;
 
 const AEGIS_ASCII = `░▒▓██████▓▒░░▒▓████████▓▒░▒▓██████▓▒░░▒▓█▓▒░░▒▓███████▓▒░
 ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░     ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░
@@ -102,14 +103,18 @@ export function ChatView({ initialSession, availableModels, onResolveFiles, onSu
     () => buildInputSuggestions(input, availableModels, availableFiles),
     [availableFiles, availableModels, input],
   );
+  const visibleSuggestions = useMemo(
+    () => sliceVisibleSuggestions(inputSuggestions, completionIndex, SUGGESTION_ROWS),
+    [completionIndex, inputSuggestions],
+  );
   const historyWidth = Math.max(24, (stdout.columns ?? 80) - 2);
   const renderedContentLines = useMemo(
     () => [...renderHeaderLines(launchQuote, historyWidth), ...renderHistoryLines(session.history, historyWidth)],
     [historyWidth, launchQuote, session.history],
   );
   const maxVisibleHistoryLines = useMemo(
-    () => estimateVisibleHistoryLines(stdout.rows ?? 24, inputSuggestions.length, Boolean(error), pending),
-    [error, pending, inputSuggestions.length, stdout.rows],
+    () => estimateVisibleHistoryLines(stdout.rows ?? 24, Boolean(error), pending),
+    [error, pending, stdout.rows],
   );
   const maxHistoryLineOffset = Math.max(0, renderedContentLines.length - maxVisibleHistoryLines);
   const visibleContentLines = useMemo(
@@ -351,15 +356,20 @@ export function ChatView({ initialSession, availableModels, onResolveFiles, onSu
 
       {error ? <Text color="red">{error}</Text> : null}
 
-      {inputSuggestions.length > 0 ? (
-        <Box flexDirection="column" flexShrink={0} marginTop={0} paddingLeft={INPUT_CONTENT_INDENT}>
-          {inputSuggestions.map((suggestion, index) => (
-            <Text key={suggestion.label} dimColor={index !== completionIndex % inputSuggestions.length}>
+      <Box flexDirection="column" flexShrink={0} marginTop={0} paddingLeft={INPUT_CONTENT_INDENT} height={SUGGESTION_ROWS}>
+        {Array.from({ length: SUGGESTION_ROWS }, (_, index) => {
+          const suggestion = visibleSuggestions[index];
+          if (!suggestion) {
+            return <Text key={`suggestion-empty-${index}`}> </Text>;
+          }
+
+          return (
+            <Text key={suggestion.completion} dimColor={!suggestion.selected}>
               {suggestion.description ? `${suggestion.label}  —  ${suggestion.description}` : suggestion.label}
             </Text>
-          ))}
-        </Box>
-      ) : null}
+          );
+        })}
+      </Box>
 
       <Box
         borderStyle="round"
@@ -503,9 +513,9 @@ function renderHeaderLines(
         { text: "│ ", color: AEGIS_ACCENT },
         { text: ">_ ", color: AEGIS_ACCENT, dimColor: true },
         { text: "Aegis", color: AEGIS_ACCENT, bold: true },
-        { text: ` (${packageJson.version})`, color: AEGIS_ACCENT, dimColor: true },
+        { text: ` (v${packageJson.version})`, color: AEGIS_ACCENT, dimColor: true },
         {
-          text: `${" ".repeat(Math.max(0, innerWidth - visualWidth(`>_ Aegis (${packageJson.version})`)))} │`,
+          text: `${" ".repeat(Math.max(0, innerWidth - visualWidth(`>_ Aegis (v${packageJson.version})`)))} │`,
           color: AEGIS_ACCENT,
         },
       ],
@@ -682,14 +692,26 @@ function stripTerminalArtifacts(value: string): string {
     .replace(/\[<\d+;\d+;\d+[mM]/g, "");
 }
 
-function estimateVisibleHistoryLines(
-  rows: number,
-  slashCommandCount: number,
-  hasError: boolean,
-  pending: boolean,
-): number {
-  const reservedRows = 5 + slashCommandCount + (hasError ? 1 : 0) + (pending ? 1 : 0);
+function estimateVisibleHistoryLines(rows: number, hasError: boolean, pending: boolean): number {
+  const reservedRows = 5 + SUGGESTION_ROWS + (hasError ? 1 : 0) + (pending ? 1 : 0);
   return Math.max(4, rows - reservedRows);
+}
+
+function sliceVisibleSuggestions(
+  suggestions: InputSuggestion[],
+  completionIndex: number,
+  limit: number,
+): Array<InputSuggestion & { selected: boolean }> {
+  if (suggestions.length === 0) {
+    return [];
+  }
+
+  const selectedIndex = completionIndex % suggestions.length;
+  const start = Math.max(0, Math.min(selectedIndex - Math.floor(limit / 2), suggestions.length - limit));
+  return suggestions.slice(start, start + limit).map((suggestion, index) => ({
+    ...suggestion,
+    selected: start + index === selectedIndex,
+  }));
 }
 
 function renderInputContent(input: string, cursorIndex: number, placeholder: string, isTerminalFocused: boolean) {
