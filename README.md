@@ -78,7 +78,7 @@ Aegis supports three runtime modes:
 
 - `local`: use a host-installed Ollama on the same machine, plus the local RAG API
 - `remote`: connect to an already-running Ollama and RAG API elsewhere on a private network or through an SSH tunnel
-- `docker`: run the full local stack inside Docker
+- `docker`: run the full local stack inside Docker, primarily for Linux/NVIDIA or CPU-only local deployments
 
 Check or switch the mode:
 
@@ -109,6 +109,15 @@ aegis doctor
 ```
 
 In local mode on macOS, `aegis doctor` reports `Acceleration: Metal (host Ollama)`.
+
+### macOS Local Models
+
+If a user keeps models on a Mac mini or another Mac, the recommended setup is to run Ollama natively on that Mac and let Ollama use Metal directly. Aegis then connects to that Ollama host:
+
+- `local` mode when the CLI and Ollama are on the same Mac
+- `remote` mode when the CLI is on a different machine and the Mac hosts Ollama
+
+On macOS, Docker is not the intended acceleration path for Ollama itself. If you containerize `rag-api`, it should connect to the host Ollama instance rather than expecting the Ollama container to get Metal access.
 
 ## Chat Modes
 
