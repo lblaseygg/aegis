@@ -463,8 +463,16 @@ function buildInputSuggestions(input: string, availableModels: string[], availab
   const fileMentionMatch = input.match(/(?:^|\s)@([^\s@]*)$/);
   if (fileMentionMatch) {
     const query = fileMentionMatch[1]?.toLowerCase() ?? "";
+    if (!query) {
+      return [];
+    }
+
     return availableFiles
-      .filter((file) => !query || file.toLowerCase().includes(query))
+      .filter((file) => {
+        const normalized = file.toLowerCase();
+        const basename = normalized.split("/").at(-1) ?? normalized;
+        return basename.startsWith(query) || normalized.startsWith(query);
+      })
       .slice(0, 12)
       .map((file) => ({
         label: `@${file}`,
