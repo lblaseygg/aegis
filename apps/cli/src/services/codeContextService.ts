@@ -88,7 +88,8 @@ Instructions:
     }
 
     const files = await this.listFiles(input.cwd, 40);
-    const mentionedFiles = resolveMentionedFiles(input.question, files);
+    const mentionCandidates = input.question.includes("@") ? await this.listFiles(input.cwd, 2000) : files;
+    const mentionedFiles = resolveMentionedFiles(input.question, mentionCandidates);
     const relevant = mergeFileMatches(
       mentionedFiles.map((file) => ({ file, lines: [] })),
       await this.findRelevantFiles(input.cwd, input.question),

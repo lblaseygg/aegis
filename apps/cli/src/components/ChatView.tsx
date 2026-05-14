@@ -10,7 +10,8 @@ import { matchSlashCommands } from "../lib/chatCommands.js";
 import type { ChatMessage, ChatProgressUpdate, ChatSessionState, ChatTurnResult } from "../types/chat.js";
 
 const AEGIS_ACCENT = "#FFFFF1";
-const USER_PROMPT_COLOR = "#22d3ee";
+const USER_PROMPT_COLOR = "gray";
+const ASSISTANT_PROMPT_COLOR = "#d4d8f4";
 const INPUT_PROMPT_INDENT = 2;
 const INPUT_CONTENT_INDENT = 4;
 const INPUT_BOX_INDENT = 1;
@@ -60,6 +61,7 @@ interface RenderedHistoryLine {
   color?: string;
   dimColor?: boolean;
   bold?: boolean;
+  isSegmented?: boolean;
   segments?: Array<{
     text: string;
     color?: string;
@@ -107,14 +109,15 @@ export function ChatView({ initialSession, availableModels, onResolveFiles, onSu
     () => sliceVisibleSuggestions(inputSuggestions, completionIndex, SUGGESTION_ROWS),
     [completionIndex, inputSuggestions],
   );
+  const activeSuggestionRows = visibleSuggestions.length;
   const historyWidth = Math.max(24, (stdout.columns ?? 80) - 2);
   const renderedContentLines = useMemo(
     () => [...renderHeaderLines(launchQuote, historyWidth), ...renderHistoryLines(session.history, historyWidth)],
     [historyWidth, launchQuote, session.history],
   );
   const maxVisibleHistoryLines = useMemo(
-    () => estimateVisibleHistoryLines(stdout.rows ?? 24, Boolean(error), pending),
-    [error, pending, stdout.rows],
+    () => estimateVisibleHistoryLines(stdout.rows ?? 24, activeSuggestionRows, Boolean(error), pending),
+    [activeSuggestionRows, error, pending, stdout.rows],
   );
   const maxHistoryLineOffset = Math.max(0, renderedContentLines.length - maxVisibleHistoryLines);
   const visibleContentLines = useMemo(
@@ -335,41 +338,40 @@ export function ChatView({ initialSession, availableModels, onResolveFiles, onSu
 
   return (
     <Box flexDirection="column">
-      <Box flexDirection="column" marginTop={1}>
+      <Box flexDirection="column" marginTop={3}>
         {visibleContentLines.map((line) => (
-          <Text key={line.id} color={line.color} dimColor={line.dimColor} bold={line.bold}>
-            {line.segments
-              ? line.segments.map((segment, index) => (
-                  <Text
-                    key={`${line.id}-segment-${index}`}
-                    color={segment.color}
-                    dimColor={segment.dimColor}
-                    bold={segment.bold}
-                  >
-                    {segment.text}
-                  </Text>
-                ))
-              : (line.text || " ")}
-          </Text>
+          line.segments ? (
+            <Box key={line.id}>
+              {line.segments.map((segment, index) => (
+                <Text
+                  key={`${line.id}-segment-${index}`}
+                  color={segment.color}
+                  dimColor={segment.dimColor}
+                  bold={segment.bold}
+                >
+                  {segment.text}
+                </Text>
+              ))}
+            </Box>
+          ) : (
+            <Text key={line.id} color={line.color} dimColor={line.dimColor} bold={line.bold}>
+              {line.text || " "}
+            </Text>
+          )
         ))}
       </Box>
 
       {error ? <Text color="red">{error}</Text> : null}
 
-      <Box flexDirection="column" flexShrink={0} marginTop={0} paddingLeft={INPUT_CONTENT_INDENT} height={SUGGESTION_ROWS}>
-        {Array.from({ length: SUGGESTION_ROWS }, (_, index) => {
-          const suggestion = visibleSuggestions[index];
-          if (!suggestion) {
-            return <Text key={`suggestion-empty-${index}`}> </Text>;
-          }
-
-          return (
+      {activeSuggestionRows > 0 ? (
+        <Box flexDirection="column" flexShrink={0} marginTop={0} paddingLeft={INPUT_CONTENT_INDENT}>
+          {visibleSuggestions.map((suggestion) => (
             <Text key={suggestion.completion} dimColor={!suggestion.selected}>
               {suggestion.description ? `${suggestion.label}  —  ${suggestion.description}` : suggestion.label}
             </Text>
-          );
-        })}
-      </Box>
+          ))}
+        </Box>
+      ) : null}
 
       <Box
         borderStyle="round"
@@ -382,7 +384,7 @@ export function ChatView({ initialSession, availableModels, onResolveFiles, onSu
         paddingY={0}
       >
         <Box>
-          <Text color={isTerminalFocused ? "yellow" : AEGIS_ACCENT} dimColor={!isTerminalFocused}>
+          <Text color={ASSISTANT_PROMPT_COLOR}>
             {"> "}
           </Text>
           {renderInputContent(input, cursorIndex, placeholder, isTerminalFocused)}
@@ -503,6 +505,10 @@ function renderHeaderLines(
   const innerWidth = Math.max(24, Math.min(60, width - 4));
   const quoteLines = wrapText(`"${launchQuote.text}"`, innerWidth);
   const authorLines = wrapText(`— ${launchQuote.author}`, innerWidth);
+  const infoLines = [
+    ...wrapText("Aegis is a private self-hosted CLI for local and remote LLM workflows.", innerWidth),
+    ...wrapText("It connects to Ollama and the RAG API on your machine or through a configured SSH tunnel.", innerWidth),
+  ];
   const boxTop = `╭${"─".repeat(innerWidth + 2)}╮`;
   const boxBottom = `╰${"─".repeat(innerWidth + 2)}╯`;
 
@@ -547,6 +553,18 @@ function renderHeaderLines(
       ],
     })),
     { id: "header-box-bottom", text: boxBottom, color: AEGIS_ACCENT },
+    { id: "header-spacer-info-0", text: "" },
+    { id: "header-info-top", text: boxTop, color: AEGIS_ACCENT },
+    ...infoLines.map((line, index) => ({
+      id: `header-info-line-${index}`,
+      text: "",
+      segments: [
+        { text: "│ ", color: AEGIS_ACCENT },
+        { text: line.padEnd(innerWidth, " "), color: AEGIS_ACCENT, dimColor: true },
+        { text: " │", color: AEGIS_ACCENT },
+      ],
+    })),
+    { id: "header-info-bottom", text: boxBottom, color: AEGIS_ACCENT },
     { id: "header-spacer-1", text: "" },
   ];
 }
@@ -570,15 +588,23 @@ function renderMessageLines(message: ChatMessage, index: number, width: number):
     ];
   }
 
-  const labelColor = message.role === "user" ? USER_PROMPT_COLOR : "green";
-
   if (message.role === "user") {
     const wrappedBody = wrapText(message.text, Math.max(4, width - 2));
     return [
       ...wrappedBody.map((line, lineIndex) => ({
         id: `history-${index}-body-${lineIndex}`,
-        text: `${lineIndex === 0 ? "> " : "  "}${line}`,
-        color: labelColor,
+        text: "",
+        segments: [
+          {
+            text: lineIndex === 0 ? "> " : "  ",
+            color: ASSISTANT_PROMPT_COLOR,
+          },
+          {
+            text: line,
+            color: USER_PROMPT_COLOR,
+            dimColor: true,
+          },
+        ],
       })),
       {
         id: `history-${index}-spacer`,
@@ -591,7 +617,7 @@ function renderMessageLines(message: ChatMessage, index: number, width: number):
     ...wrapText(message.text, Math.max(4, width - 2)).map((line, lineIndex) => ({
       id: `history-${index}-body-${lineIndex}`,
       text: `${lineIndex === 0 ? "> " : "  "}${line}`,
-      color: labelColor,
+      color: ASSISTANT_PROMPT_COLOR,
     })),
     {
       id: `history-${index}-spacer`,
@@ -700,8 +726,8 @@ function stripTerminalArtifacts(value: string): string {
     .replace(/\[<\d+;\d+;\d+[mM]/g, "");
 }
 
-function estimateVisibleHistoryLines(rows: number, hasError: boolean, pending: boolean): number {
-  const reservedRows = 5 + SUGGESTION_ROWS + (hasError ? 1 : 0) + (pending ? 1 : 0);
+function estimateVisibleHistoryLines(rows: number, suggestionRows: number, hasError: boolean, pending: boolean): number {
+  const reservedRows = 5 + suggestionRows + (hasError ? 1 : 0) + (pending ? 1 : 0);
   return Math.max(4, rows - reservedRows);
 }
 

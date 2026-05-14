@@ -1,10 +1,6 @@
 # Aegis CLI
 
-Aegis is an offline-first local LLM operations toolkit built around an Ink terminal UI, a FastAPI RAG service, Ollama, and audit-first packaging for air-gapped environments.
-
-## Status
-
-The repository is structured as a greenfield MVP that tracks the build plan in [plan.md](/Users/blasey/Developer/aegis/plan.md).
+Aegis is a private self-hosted local LLM operations toolkit built around an Ink terminal UI, a FastAPI RAG service, Ollama, and packaging flows for offline or isolated deployments.
 
 ## Layout
 
@@ -12,59 +8,69 @@ The repository is structured as a greenfield MVP that tracks the build plan in [
 - `apps/rag-api`: FastAPI RAG service
 - `config/`: default runtime and security settings
 - `scripts/`: bundle, verify, install, and smoke-test utilities
-- `docs/`: operator, security, architecture, and air-gap documentation
+- `docs/`: operator, security, architecture, and offline deployment documentation
 
-## Quickstart
+## Recommended Client Install
 
-1. `npm install`
-2. `python3 -m venv .venv`
-3. `.venv/bin/pip install -e './apps/rag-api[dev]'`
-4. `npm run build`
-5. `node apps/cli/dist/index.js init`
-6. `node apps/cli/dist/index.js doctor`
-
-## Install The `aegis` Command
-
-To make `aegis` available directly in your terminal:
+For the current private self-hosted remote flow, the client install path is:
 
 ```bash
+npm install
+npm run build
 npm run install:cli
 aegis
 ```
 
-## macOS Package
-
-The repo now includes a macOS packaging pipeline that builds:
-
-- `Aegis.app`
-- `Aegis.pkg`
-
-The package is designed for the user flow:
-
-1. install Aegis
-2. open Terminal
-3. run `aegis`
-
-On first launch, Aegis bootstraps its embedded runtimes and support files under:
-
-`~/Library/Application Support/Aegis`
-
-That first-run setup:
-
-- installs the embedded CLI, RAG API, Python runtime, and bundled native Ollama runtime
-- starts Ollama and the RAG API as user launch agents
-- writes an Aegis shell PATH entry for future sessions
-- imports the bundled default model store if one was included at build time
-- exposes any optional bundled model packs for later install
-
-Build commands:
+That gives you the repo-linked CLI command. The recommended first-run flow after install is:
 
 ```bash
-npm run build:macos-app
-npm run build:macos-pkg
+aegis remote connect
+aegis
 ```
 
-For the full packaging inputs and signing environment variables, see [macOS installer guide](/Users/blasey/Developer/aegis/docs/macos-installer.md).
+## Remote Server Setup
+
+The primary self-hosted deployment model is:
+
+- a thin Aegis client on the user machine
+- Ollama and the RAG API on a private Linux server
+- SSH tunnel transport between the client and the server
+
+Typical server flow:
+
+```bash
+docker compose up -d ollama rag-api
+docker exec -it aegis-ollama ollama pull qwen3:8b
+docker exec -it aegis-ollama ollama pull phi4-mini
+docker exec -it aegis-ollama ollama pull qwen2.5-coder:7b
+docker exec -it aegis-ollama ollama pull qwen2.5-coder:3b
+```
+
+The bundled [docker-compose.yml](/Users/blasey/Developer/aegis/docker-compose.yml) config requests NVIDIA GPU access for the `ollama` service with `gpus: all` plus the standard `NVIDIA_VISIBLE_DEVICES` and `NVIDIA_DRIVER_CAPABILITIES` environment variables. This is intended for Linux hosts with the NVIDIA Container Toolkit installed. If GPU support is unavailable, the Ollama container will not get acceleration and should be treated as a CPU-only path.
+
+### Client Remote Setup
+
+Run the remote setup wizard on the client:
+
+```bash
+aegis remote connect
+```
+
+The wizard:
+
+- validates the SSH host or alias
+- checks that the chosen local forwarded ports are free
+- writes a verified `remote` runtime config
+- starts the tunnel once to verify Ollama and the RAG API are reachable
+
+By default it builds the `ssh -L` forwards itself, so users do not have to hand-edit `LocalForward` entries. If you already maintain those in `~/.ssh/config`, you can opt into them during the wizard or pass `--use-ssh-config-forwards`.
+
+After setup, the normal flow is just:
+
+```bash
+aegis doctor
+aegis
+```
 
 ## Runtime Modes
 
@@ -104,19 +110,6 @@ aegis doctor
 
 In local mode on macOS, `aegis doctor` reports `Acceleration: Metal (host Ollama)`.
 
-### Remote Ollama And RAG
-
-For a private-network or SSH-tunneled setup, point Aegis at the remote endpoints and switch to `remote` mode:
-
-```bash
-aegis runtime use remote
-OLLAMA_BASE_URL=http://127.0.0.1:11435 \
-RAG_API_BASE_URL=http://127.0.0.1:18088 \
-aegis doctor
-```
-
-In remote mode, `aegis up` does not start local services. It expects the model server and RAG API to already be reachable.
-
 ## Chat Modes
 
 Bare `aegis` now opens the interactive chat UI. It supports two modes:
@@ -130,12 +123,11 @@ Useful slash commands inside chat:
 /mode docs
 /mode code
 /auto
-/manual qwen3:8b
-/model qwen3:8b
-/collection default
+/manual
+/model
+/collection
 /review
-/review off
-/cwd /path/to/project
+/cwd
 /files
 /resume
 /clear
@@ -147,6 +139,14 @@ Model routing supports two behaviors:
 - `auto`: choose a model per prompt from the configured profiles
 
 `/model <name>` updates the manual fallback model. It does not disable auto routing. Use `/manual` when you explicitly want to pin future prompts to one model.
+
+Inside chat, file mentions from the current workspace are also supported. Type `@` followed by a filename prefix, then select the file suggestion:
+
+```text
+Explain @README.md
+Review @src/index.ts
+Improve docs in @worker/worker/cli.py
+```
 
 The default profiles are:
 
@@ -174,23 +174,9 @@ aegis models install-pack gemma3-12b --select gemma3:12b
 
 Longer local generations can be tuned with `AEGIS_QUERY_TIMEOUT_MS`, `AEGIS_OLLAMA_GENERATE_TIMEOUT_MS`, `AEGIS_OLLAMA_NUM_PREDICT`, `AEGIS_OLLAMA_NUM_CTX`, `OLLAMA_GENERATE_TIMEOUT_SECONDS`, `OLLAMA_NUM_PREDICT`, or `OLLAMA_NUM_CTX`.
 
-## Air-gap bundle flow
-
-- `node apps/cli/dist/index.js bundle create`
-- `./scripts/verify-bundle.sh ./bundle`
-- `./scripts/load-docker-images.sh ./bundle`
-- `./scripts/install-offline.sh ./runtime`
-
 ## Docker CLI Usage
 
-Start the backing services:
-
-```bash
-aegis runtime use docker
-aegis up
-```
-
-Run the CLI container:
+Run the CLI container directly if you want everything inside Compose:
 
 ```bash
 docker compose run --rm cli doctor
@@ -200,6 +186,22 @@ docker compose run --rm cli chat
 ```
 
 The container entrypoint also accepts `docker compose run --rm cli aegis ...` if that is more natural for the operator.
+
+## Optional macOS Package
+
+The repo also includes a macOS packaging pipeline that builds:
+
+- `Aegis.app`
+- `Aegis.pkg`
+
+This is an optional distribution path for single-machine or macOS-managed installs. For the packaging inputs and signing environment variables, see [macOS installer guide](/Users/blasey/Developer/aegis/docs/macos-installer.md).
+
+## Offline Bundle Flow
+
+- `node apps/cli/dist/index.js bundle create`
+- `./scripts/verify-bundle.sh ./bundle`
+- `./scripts/load-docker-images.sh ./bundle`
+- `./scripts/install-offline.sh ./runtime`
 
 ## Local targets
 

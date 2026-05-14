@@ -1,5 +1,7 @@
 # macOS Installer
 
+This is an optional distribution path. The primary self-hosted deployment flow in the README is now the thin client plus remote model server setup.
+
 This repository can now build a macOS-first Aegis distribution that installs:
 
 - `/Applications/Aegis.app`

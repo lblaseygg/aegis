@@ -14,6 +14,7 @@ import { runInit } from "./commands/init.js";
 import { runLogsTail } from "./commands/logs.js";
 import { runModelPackInstall, runModelPacksList, runModelsList, runModelsSelect } from "./commands/models.js";
 import { runIngest, runQuery } from "./commands/rag.js";
+import { runRemoteConnect } from "./commands/remote.js";
 import { runRuntimeStatus, runRuntimeUse } from "./commands/runtime.js";
 import { runUp } from "./commands/up.js";
 import { APP_NAME } from "./lib/constants.js";
@@ -134,6 +135,7 @@ models
   });
 
 const rag = program.command("rag").description("Operate the local retrieval pipeline");
+const remote = program.command("remote").description("Configure remote SSH-tunneled model access");
 
 const runtime = program.command("runtime").description("Inspect or switch the local runtime mode");
 
@@ -168,6 +170,35 @@ rag
   .description("Run a grounded query against the local vector store")
   .action(async (question: string, options: { collection?: string }) => {
     await runQuery(question, options.collection);
+  });
+
+remote
+  .command("connect")
+  .argument("[host]", "SSH host or alias, for example aegis-ubuntu or user@server")
+  .option("--ollama-port <port>", "Local forwarded Ollama port", "11435")
+  .option("--rag-port <port>", "Local forwarded RAG API port", "18088")
+  .option("--remote-ollama-url <url>", "Remote Ollama URL on the server", "http://127.0.0.1:11434")
+  .option("--remote-rag-url <url>", "Remote RAG API URL on the server", "http://127.0.0.1:8088")
+  .option("--model <model>", "Preferred model to save into config")
+  .option("--use-ssh-config-forwards", "Reuse LocalForward entries from your SSH config instead of building -L rules")
+  .description("Guide the client through remote SSH tunnel setup and save a verified remote config")
+  .action(async (host: string | undefined, options: {
+    ollamaPort?: string;
+    ragPort?: string;
+    remoteOllamaUrl?: string;
+    remoteRagUrl?: string;
+    model?: string;
+    useSshConfigForwards?: boolean;
+  }) => {
+    await runRemoteConnect({
+      host,
+      ollamaPort: options.ollamaPort,
+      ragPort: options.ragPort,
+      remoteOllamaUrl: options.remoteOllamaUrl,
+      remoteRagUrl: options.remoteRagUrl,
+      model: options.model,
+      useSshConfigForwards: options.useSshConfigForwards,
+    });
   });
 
 const logs = program.command("logs").description("Inspect local audit logs");

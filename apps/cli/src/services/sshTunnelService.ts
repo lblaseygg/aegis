@@ -42,8 +42,10 @@ export class SshTunnelService {
     }
 
     if (ollamaReachable !== ragReachable) {
+      const ollamaPort = resolvePort(localOllamaUrl);
+      const ragPort = resolvePort(localRagUrl);
       throw new Error(
-        "Remote SSH tunnel appears partially active. Free the configured local tunnel ports or use matching forwarded ports.",
+        `Remote SSH tunnel is only partially active. Local Ollama port ${ollamaPort} is ${ollamaReachable ? "reachable" : "offline"} and local RAG port ${ragPort} is ${ragReachable ? "reachable" : "offline"}. Free the configured ports or rerun \`aegis remote connect\`.`,
       );
     }
 
@@ -68,10 +70,25 @@ export class SshTunnelService {
     });
 
     if (result.exitCode !== 0) {
-      throw new Error(`Failed to start SSH tunnel for host "${tunnel.host}".`);
+      throw new Error(
+        `Failed to start the SSH tunnel for "${tunnel.host}". Verify SSH access to the host and confirm the configured forwarded ports are available locally.`,
+      );
     }
 
     await waitForUrls([localOllamaUrl, localRagUrl], this.portChecker);
+  }
+
+  async validateHost(target: string): Promise<void> {
+    const result = await this.commandRunner("ssh", ["-G", target], {
+      reject: false,
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+
+    if (result.exitCode !== 0) {
+      throw new Error(`SSH host "${target}" is not valid or not resolvable by your local SSH configuration.`);
+    }
   }
 }
 
@@ -99,10 +116,13 @@ async function waitForUrls(urls: URL[], portChecker: (url: URL) => Promise<boole
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
 
-  throw new Error("SSH tunnel started, but the forwarded local ports did not become reachable in time.");
+  const formatted = urls.map((url) => `${url.hostname}:${resolvePort(url)}`).join(", ");
+  throw new Error(
+    `The SSH tunnel started, but the forwarded local ports did not become reachable in time (${formatted}). Verify the remote Ollama and RAG services are running and the tunnel forwards are correct.`,
+  );
 }
 
-async function isUrlReachable(url: URL): Promise<boolean> {
+export async function isUrlReachable(url: URL): Promise<boolean> {
   const port = resolvePort(url);
   return await new Promise<boolean>((resolve) => {
     const socket = net.createConnection({ host: url.hostname, port });
@@ -116,5 +136,17 @@ async function isUrlReachable(url: URL): Promise<boolean> {
     socket.once("connect", () => finalize(true));
     socket.once("timeout", () => finalize(false));
     socket.once("error", () => finalize(false));
+  });
+}
+
+export async function isLocalPortFree(port: number, host = "127.0.0.1"): Promise<boolean> {
+  return await new Promise<boolean>((resolve) => {
+    const server = net.createServer();
+    server.unref();
+    server.once("error", () => resolve(false));
+    server.once("listening", () => {
+      server.close(() => resolve(true));
+    });
+    server.listen(port, host);
   });
 }

@@ -77,7 +77,7 @@ export class ChatService {
         .join("\n\n");
 
       if (!parsedAnswer.answer.trim()) {
-        throw new Error("The model returned an empty response.");
+        throw new Error("The model returned an empty response. Try again or switch models with `/model`.");
       }
 
       nextSession.history.push({ role: "assistant", text });
@@ -96,7 +96,7 @@ export class ChatService {
     });
     const answer = await this.ollamaClient.generate(resolvedModel, prompt, onProgress);
     if (!answer.trim()) {
-      throw new Error("The model returned an empty response.");
+      throw new Error("The model returned an empty response. Try again or switch models with `/model`.");
     }
     nextSession.history.push({ role: "assistant", text: answer });
     await this.sessionStore.save(nextSession);
