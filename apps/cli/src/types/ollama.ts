@@ -7,3 +7,8 @@ export interface OllamaModelSummary {
 export interface OllamaGenerateResponse {
   response: string;
 }
+
+export interface OllamaGenerateStreamResponse {
+  response?: string;
+  done?: boolean;
+}

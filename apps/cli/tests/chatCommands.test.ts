@@ -12,6 +12,12 @@ describe("parseSlashCommand", () => {
     expect(parseSlashCommand("/mode")).toEqual({ type: "mode" });
   });
 
+  test("parses auto and manual commands", () => {
+    expect(parseSlashCommand("/auto")).toEqual({ type: "auto" });
+    expect(parseSlashCommand("/manual")).toEqual({ type: "manual" });
+    expect(parseSlashCommand("/manual qwen3:8b")).toEqual({ type: "manual", model: "qwen3:8b" });
+  });
+
   test("parses review toggles", () => {
     expect(parseSlashCommand("/review")).toEqual({ type: "review", enabled: true });
     expect(parseSlashCommand("/review off")).toEqual({ type: "review", enabled: false });
@@ -25,6 +31,7 @@ describe("parseSlashCommand", () => {
   test("matches slash commands for live suggestions", () => {
     expect(matchSlashCommands("/").map((command) => command.name)).toContain("help");
     expect(matchSlashCommands("/mo").map((command) => command.name)).toEqual(["mode", "model"]);
+    expect(matchSlashCommands("/a").map((command) => command.name)).toEqual(["auto"]);
     expect(matchSlashCommands("hello")).toEqual([]);
   });
 });

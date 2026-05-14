@@ -54,7 +54,7 @@ That first-run setup:
 - installs the embedded CLI, RAG API, Python runtime, and bundled native Ollama runtime
 - starts Ollama and the RAG API as user launch agents
 - writes an Aegis shell PATH entry for future sessions
-- imports the bundled default model store
+- imports the bundled default model store if one was included at build time
 - exposes any optional bundled model packs for later install
 
 Build commands:
@@ -68,24 +68,26 @@ For the full packaging inputs and signing environment variables, see [macOS inst
 
 ## Runtime Modes
 
-Aegis supports two local runtime modes:
+Aegis supports three runtime modes:
 
-- `native`: for macOS users running Ollama on the host with Metal acceleration
-- `docker`: for users running the full local stack inside Docker
+- `local`: use a host-installed Ollama on the same machine, plus the local RAG API
+- `remote`: connect to an already-running Ollama and RAG API elsewhere on a private network or through an SSH tunnel
+- `docker`: run the full local stack inside Docker
 
 Check or switch the mode:
 
 ```bash
 aegis runtime status
-aegis runtime use native
+aegis runtime use local
+aegis runtime use remote
 aegis runtime use docker
 ```
 
-For macOS users, `aegis init` now prefers `native` automatically when a native Ollama install is detected.
+When a host Ollama install is detected, `aegis init` now prefers `local` automatically.
 
-### macOS Native Ollama
+### Host Ollama
 
-On macOS, the recommended setup is:
+For same-machine installs, the recommended setup is:
 
 1. Install Ollama natively on the host
 2. Pull a local model into the host Ollama runtime
@@ -95,12 +97,25 @@ Example:
 
 ```bash
 ollama pull gemma3:4b
-aegis runtime use native
+aegis runtime use local
 aegis up
 aegis doctor
 ```
 
-In native mode, `aegis doctor` reports `Acceleration: Metal (native Ollama)`.
+In local mode on macOS, `aegis doctor` reports `Acceleration: Metal (host Ollama)`.
+
+### Remote Ollama And RAG
+
+For a private-network or SSH-tunneled setup, point Aegis at the remote endpoints and switch to `remote` mode:
+
+```bash
+aegis runtime use remote
+OLLAMA_BASE_URL=http://127.0.0.1:11435 \
+RAG_API_BASE_URL=http://127.0.0.1:18088 \
+aegis doctor
+```
+
+In remote mode, `aegis up` does not start local services. It expects the model server and RAG API to already be reachable.
 
 ## Chat Modes
 
@@ -114,7 +129,9 @@ Useful slash commands inside chat:
 ```text
 /mode docs
 /mode code
-/model gemma3:4b
+/auto
+/manual qwen3:8b
+/model qwen3:8b
 /collection default
 /review
 /review off
@@ -124,7 +141,24 @@ Useful slash commands inside chat:
 /clear
 ```
 
-To install and select the default Gemma model locally:
+Model routing supports two behaviors:
+
+- `manual`: always use the selected manual model
+- `auto`: choose a model per prompt from the configured profiles
+
+`/model <name>` updates the manual fallback model. It does not disable auto routing. Use `/manual` when you explicitly want to pin future prompts to one model.
+
+The default profiles are:
+
+- `fast_general`: `phi4-mini`
+- `long_running`: `qwen3:8b`
+- `coding_optimized`: `qwen2.5-coder:7b`
+- `coding_fast`: `qwen2.5-coder:3b`
+- `coding_strong`: `qwen2.5-coder:7b`
+
+If a preferred profile model is not installed, Aegis falls back to the manual model or the first available Ollama model.
+
+To install and select a same-machine Ollama model:
 
 ```bash
 ollama pull gemma3:4b
@@ -171,3 +205,5 @@ The container entrypoint also accepts `docker compose run --rm cli aegis ...` if
 
 - Ollama: `http://127.0.0.1:11434`
 - RAG API: `http://127.0.0.1:8088`
+
+For remote/tunneled setups, these can instead point at local forwarded ports such as `11435` and `18088`.

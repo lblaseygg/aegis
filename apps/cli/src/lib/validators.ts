@@ -5,7 +5,7 @@ import { ConfigError } from "./errors.js";
 
 const localUrlSchema = z.string().url().refine((value) => {
   const url = new URL(value);
-  return ["127.0.0.1", "localhost", "ollama", "rag-api", "host.docker.internal"].includes(url.hostname);
+  return isPermittedOfflineHost(url.hostname);
 }, "URL must remain local while offline mode is enabled.");
 
 const configSchema = z.object({
@@ -15,8 +15,16 @@ const configSchema = z.object({
     rag_api_base_url: z.string().url(),
   }),
   runtime: z.object({
-    mode: z.enum(["native", "docker"]),
+    mode: z.enum(["local", "remote", "docker"]),
     model: z.string().min(1),
+    selection: z.enum(["auto", "manual"]),
+    model_profiles: z.object({
+      fast_general: z.string().min(1),
+      long_running: z.string().min(1),
+      coding_optimized: z.string().min(1),
+      coding_fast: z.string().min(1),
+      coding_strong: z.string().min(1),
+    }),
     collection: z.string().min(1),
     embedding_provider: z.string().min(1),
   }),
@@ -51,4 +59,27 @@ export function validateConfig(config: unknown): AegisConfig {
   }
 
   return parsed;
+}
+
+function isPermittedOfflineHost(hostname: string): boolean {
+  if (["127.0.0.1", "localhost", "ollama", "rag-api", "host.docker.internal"].includes(hostname)) {
+    return true;
+  }
+
+  if (hostname.endsWith(".local")) {
+    return true;
+  }
+
+  const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!ipv4Match) {
+    return false;
+  }
+
+  const octets = ipv4Match.slice(1).map((part) => Number(part));
+  if (octets.some((octet) => Number.isNaN(octet) || octet < 0 || octet > 255)) {
+    return false;
+  }
+
+  const [first, second] = octets;
+  return first === 10 || first === 127 || (first === 192 && second === 168) || (first === 172 && second >= 16 && second <= 31);
 }

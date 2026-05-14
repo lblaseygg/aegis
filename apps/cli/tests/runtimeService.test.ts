@@ -3,28 +3,28 @@ import { describe, expect, test } from "vitest";
 import { RuntimeService } from "../src/services/runtimeService.js";
 
 describe("RuntimeService", () => {
-  test("prefers native mode on macOS when native Ollama is installed", async () => {
+  test("prefers local mode on macOS when host Ollama is installed", async () => {
     const service = new RuntimeService({
       platform: "darwin",
-      nativeInstallDetector: async () => true,
+      hostInstallDetector: async () => true,
     });
 
-    await expect(service.recommendedMode()).resolves.toBe("native");
+    await expect(service.recommendedMode()).resolves.toBe("local");
   });
 
-  test("falls back to docker mode when native Ollama is unavailable", async () => {
+  test("falls back to docker mode when host Ollama is unavailable", async () => {
     const service = new RuntimeService({
       platform: "darwin",
-      nativeInstallDetector: async () => false,
+      hostInstallDetector: async () => false,
     });
 
     await expect(service.recommendedMode()).resolves.toBe("docker");
   });
 
-  test("routes docker compose to host Ollama for native mode on macOS", () => {
+  test("routes docker compose to host Ollama for local mode on macOS", () => {
     const service = new RuntimeService({
       platform: "darwin",
-      nativeInstallDetector: async () => true,
+      hostInstallDetector: async () => true,
     });
 
     expect(
@@ -35,7 +35,7 @@ describe("RuntimeService", () => {
           rag_api_base_url: "http://127.0.0.1:8088",
         },
         runtime: {
-          mode: "native",
+          mode: "local",
           model: "gemma3:4b",
           collection: "default",
           embedding_provider: "hash",

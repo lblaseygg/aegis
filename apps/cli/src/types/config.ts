@@ -1,3 +1,15 @@
+export type RuntimeMode = "local" | "remote" | "docker";
+export type ModelSelectionMode = "auto" | "manual";
+export type ModelProfileName = "fast_general" | "long_running" | "coding_optimized" | "coding_fast" | "coding_strong";
+
+export interface ModelProfiles {
+  fast_general: string;
+  long_running: string;
+  coding_optimized: string;
+  coding_fast: string;
+  coding_strong: string;
+}
+
 export interface AegisConfig {
   offline_mode: boolean;
   network: {
@@ -5,8 +17,10 @@ export interface AegisConfig {
     rag_api_base_url: string;
   };
   runtime: {
-    mode: "native" | "docker";
+    mode: RuntimeMode;
     model: string;
+    selection: ModelSelectionMode;
+    model_profiles: ModelProfiles;
     collection: string;
     embedding_provider: string;
   };

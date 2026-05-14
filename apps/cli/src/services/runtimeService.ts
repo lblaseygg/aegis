@@ -10,55 +10,73 @@ export type RuntimeMode = AegisConfig["runtime"]["mode"];
 export interface RuntimeStatus {
   mode: RuntimeMode;
   platform: NodeJS.Platform;
-  nativeOllamaInstalled: boolean;
+  hostOllamaInstalled: boolean;
   acceleration: string;
 }
 
 interface RuntimeServiceOptions {
   platform?: NodeJS.Platform;
-  nativeInstallDetector?: () => Promise<boolean>;
+  hostInstallDetector?: () => Promise<boolean>;
 }
 
 export class RuntimeService {
   private readonly platform: NodeJS.Platform;
-  private readonly nativeInstallDetector: () => Promise<boolean>;
+  private readonly hostInstallDetector: () => Promise<boolean>;
 
   constructor(options: RuntimeServiceOptions = {}) {
     this.platform = options.platform ?? process.platform;
-    this.nativeInstallDetector = options.nativeInstallDetector ?? (() => detectNativeOllamaInstall(this.platform));
+    this.hostInstallDetector = options.hostInstallDetector ?? (() => detectHostOllamaInstall(this.platform));
   }
 
   async recommendedMode(): Promise<RuntimeMode> {
-    if (this.platform === "darwin" && (await this.nativeInstallDetector())) {
-      return "native";
+    if (await this.hostInstallDetector()) {
+      return "local";
     }
 
     return "docker";
   }
 
-  supportsNativeMode(): boolean {
-    return this.platform === "darwin";
+  supportsLocalMode(): boolean {
+    return this.platform === "darwin" || this.platform === "linux" || this.platform === "win32";
   }
 
   async inspect(config: AegisConfig): Promise<RuntimeStatus> {
-    const nativeOllamaInstalled = await this.nativeInstallDetector();
+    const hostOllamaInstalled = await this.hostInstallDetector();
     return {
       mode: config.runtime.mode,
       platform: this.platform,
-      nativeOllamaInstalled,
+      hostOllamaInstalled,
       acceleration: this.describeAcceleration(config.runtime.mode),
     };
   }
 
   getComposeServices(config: AegisConfig): string[] {
-    return config.runtime.mode === "native" && this.platform === "darwin" ? ["rag-api"] : ["ollama", "rag-api"];
+    if (config.runtime.mode === "docker") {
+      return ["ollama", "rag-api"];
+    }
+
+    if (config.runtime.mode === "local") {
+      return ["rag-api"];
+    }
+
+    return [];
   }
 
   getComposeEnvironment(config: AegisConfig): NodeJS.ProcessEnv {
-    if (config.runtime.mode === "native" && this.platform === "darwin") {
+    if (config.runtime.mode === "local" && this.platform === "darwin") {
       return {
         OLLAMA_BASE_URL: "http://host.docker.internal:11434",
       };
+    }
+
+    if (config.runtime.mode === "local") {
+      return {
+        OLLAMA_BASE_URL: "http://127.0.0.1:11434",
+      };
+    }
+
+    if (config.runtime.mode === "remote") {
+      return {};
     }
 
     return {
@@ -73,6 +91,14 @@ export class RuntimeService {
       runtime: {
         mode,
         model: config.runtime.model ?? "gemma3:4b",
+        selection: config.runtime.selection ?? "auto",
+        model_profiles: {
+          fast_general: config.runtime.model_profiles?.fast_general ?? "phi4-mini",
+          long_running: config.runtime.model_profiles?.long_running ?? "qwen3:8b",
+          coding_optimized: config.runtime.model_profiles?.coding_optimized ?? "qwen2.5-coder:7b",
+          coding_fast: config.runtime.model_profiles?.coding_fast ?? "qwen2.5-coder:3b",
+          coding_strong: config.runtime.model_profiles?.coding_strong ?? "qwen2.5-coder:7b",
+        },
         collection: config.runtime.collection ?? "default",
         embedding_provider: config.runtime.embedding_provider ?? "hash",
       },
@@ -80,30 +106,38 @@ export class RuntimeService {
   }
 
   assertSupportedMode(mode: RuntimeMode): void {
-    if (mode === "native" && !this.supportsNativeMode()) {
-      throw new Error("Native runtime mode is currently supported only on macOS.");
+    if (mode === "local" && !this.supportsLocalMode()) {
+      throw new Error("Local runtime mode is not supported on this platform.");
     }
   }
 
   private describeAcceleration(mode: RuntimeMode): string {
-    if (mode === "native" && this.platform === "darwin") {
-      return "Metal (native Ollama)";
+    if (mode === "local" && this.platform === "darwin") {
+      return "Metal (host Ollama)";
+    }
+
+    if (mode === "local") {
+      return "Host Ollama";
+    }
+
+    if (mode === "remote") {
+      return "Remote Ollama";
     }
 
     return "CPU (Docker Ollama)";
   }
 }
 
-async function detectNativeOllamaInstall(platform: NodeJS.Platform): Promise<boolean> {
-  if (platform !== "darwin") {
-    return false;
+async function detectHostOllamaInstall(platform: NodeJS.Platform): Promise<boolean> {
+  try {
+    if (platform === "darwin") {
+      await access("/Applications/Ollama.app", constants.R_OK);
+      return true;
+    }
+  } catch {
+    // Fall through to CLI lookup.
   }
 
-  try {
-    await access("/Applications/Ollama.app", constants.R_OK);
-    return true;
-  } catch {
-    const lookup = await execa("which", ["ollama"], { reject: false });
-    return lookup.exitCode === 0;
-  }
+  const lookup = await execa(platform === "win32" ? "where" : "which", ["ollama"], { reject: false });
+  return lookup.exitCode === 0;
 }

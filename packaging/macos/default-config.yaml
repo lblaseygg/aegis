@@ -5,8 +5,15 @@ network:
   rag_api_base_url: http://127.0.0.1:8088
 
 runtime:
-  mode: native
+  mode: local
   model: gemma3:4b
+  selection: auto
+  model_profiles:
+    fast_general: phi4-mini
+    long_running: qwen3:8b
+    coding_optimized: qwen2.5-coder:7b
+    coding_fast: qwen2.5-coder:3b
+    coding_strong: qwen2.5-coder:7b
   collection: default
   embedding_provider: hash
 

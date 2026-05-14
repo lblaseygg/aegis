@@ -1,7 +1,11 @@
+import readline from "node:readline";
+import type { Readable } from "node:stream";
+
 import axios, { AxiosInstance } from "axios";
 
 import { DEFAULT_OLLAMA_URL } from "../lib/constants.js";
-import type { OllamaGenerateResponse, OllamaModelSummary } from "../types/ollama.js";
+import type { ChatProgressUpdate } from "../types/chat.js";
+import type { OllamaGenerateStreamResponse, OllamaModelSummary } from "../types/ollama.js";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
 const DEFAULT_GENERATE_TIMEOUT_MS = 180_000;
@@ -37,13 +41,17 @@ export class OllamaClient {
     }
   }
 
-  async generate(model: string, prompt: string): Promise<string> {
-    const response = await this.http.post<OllamaGenerateResponse>(
+  async generate(
+    model: string,
+    prompt: string,
+    onProgress?: (update: ChatProgressUpdate) => void,
+  ): Promise<string> {
+    const response = await this.http.post<Readable>(
       "/api/generate",
       {
         model,
         prompt,
-        stream: false,
+        stream: true,
         options: {
           num_predict: Number(process.env.AEGIS_OLLAMA_NUM_PREDICT ?? DEFAULT_GENERATE_TOKENS),
           num_ctx: Number(process.env.AEGIS_OLLAMA_NUM_CTX ?? DEFAULT_CONTEXT_WINDOW),
@@ -51,9 +59,69 @@ export class OllamaClient {
         },
       },
       {
+        responseType: "stream",
         timeout: Number(process.env.AEGIS_OLLAMA_GENERATE_TIMEOUT_MS ?? DEFAULT_GENERATE_TIMEOUT_MS),
       },
     );
-    return response.data.response;
+
+    let rawResponse = "";
+    const lines = readline.createInterface({ input: response.data, crlfDelay: Infinity });
+
+    for await (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      const chunk = JSON.parse(trimmed) as OllamaGenerateStreamResponse;
+      rawResponse += chunk.response ?? "";
+      const parsed = parseThinkingEnvelope(rawResponse);
+      onProgress?.({
+        model,
+        phase: parsed.thinking ? "thinking" : "working",
+        thinking: parsed.thinking || undefined,
+      });
+    }
+
+    return parseThinkingEnvelope(rawResponse).answer;
   }
+}
+
+export function parseThinkingEnvelope(raw: string): { thinking: string; answer: string } {
+  let cursor = 0;
+  let thinking = "";
+  let answer = "";
+  let inThinking = false;
+
+  while (cursor < raw.length) {
+    if (!inThinking) {
+      const start = raw.indexOf("<think>", cursor);
+      if (start === -1) {
+        answer += raw.slice(cursor);
+        break;
+      }
+
+      answer += raw.slice(cursor, start);
+      cursor = start + "<think>".length;
+      inThinking = true;
+      continue;
+    }
+
+    const end = raw.indexOf("</think>", cursor);
+    if (end === -1) {
+      thinking += raw.slice(cursor);
+      cursor = raw.length;
+      break;
+    }
+
+    thinking += raw.slice(cursor, end);
+    cursor = end + "</think>".length;
+    inThinking = false;
+  }
+
+  const hadThinking = raw.includes("<think>");
+  return {
+    thinking: thinking.trim(),
+    answer: hadThinking ? answer.replace(/^\s+/, "") : answer,
+  };
 }

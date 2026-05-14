@@ -7,7 +7,7 @@ import Spinner from "ink-spinner";
 
 import packageJson from "../../package.json" with { type: "json" };
 import { matchSlashCommands } from "../lib/chatCommands.js";
-import type { ChatMessage, ChatSessionState, ChatTurnResult } from "../types/chat.js";
+import type { ChatMessage, ChatProgressUpdate, ChatSessionState, ChatTurnResult } from "../types/chat.js";
 
 const AEGIS_ACCENT = "#FFFFF1";
 const USER_PROMPT_COLOR = "#22d3ee";
@@ -48,7 +48,8 @@ const LAUNCH_QUOTES = [
 
 interface ChatViewProps {
   initialSession: ChatSessionState;
-  onSubmit: (value: string, session: ChatSessionState) => Promise<ChatTurnResult>;
+  availableModels: string[];
+  onSubmit: (value: string, session: ChatSessionState, onProgress?: (update: ChatProgressUpdate) => void) => Promise<ChatTurnResult>;
 }
 
 interface RenderedHistoryLine {
@@ -65,6 +66,12 @@ interface RenderedHistoryLine {
   }>;
 }
 
+interface InputSuggestion {
+  label: string;
+  description: string;
+  completion: string;
+}
+
 interface FooterLineProps {
   width: number;
   directory: string;
@@ -72,7 +79,7 @@ interface FooterLineProps {
   model: string;
 }
 
-export function ChatView({ initialSession, onSubmit }: ChatViewProps) {
+export function ChatView({ initialSession, availableModels, onSubmit }: ChatViewProps) {
   const { exit } = useApp();
   const { stdin } = useStdin();
   const { stdout } = useStdout();
@@ -86,30 +93,24 @@ export function ChatView({ initialSession, onSubmit }: ChatViewProps) {
   const [isTerminalFocused, setIsTerminalFocused] = useState(true);
   const [historyLineOffset, setHistoryLineOffset] = useState(0);
   const [branchLabel, setBranchLabel] = useState<string | null>(null);
+  const [completionIndex, setCompletionIndex] = useState(0);
+  const [progressUpdate, setProgressUpdate] = useState<ChatProgressUpdate | null>(null);
 
-  const slashCommands = matchSlashCommands(input);
+  const inputSuggestions = useMemo(() => buildInputSuggestions(input, availableModels), [availableModels, input]);
   const historyWidth = Math.max(24, (stdout.columns ?? 80) - 2);
   const renderedContentLines = useMemo(
     () => [...renderHeaderLines(launchQuote, historyWidth), ...renderHistoryLines(session.history, historyWidth)],
     [historyWidth, launchQuote, session.history],
   );
   const maxVisibleHistoryLines = useMemo(
-    () => estimateVisibleHistoryLines(stdout.rows ?? 24, slashCommands.length, Boolean(error), pending),
-    [error, pending, slashCommands.length, stdout.rows],
+    () => estimateVisibleHistoryLines(stdout.rows ?? 24, inputSuggestions.length, Boolean(error), pending),
+    [error, pending, inputSuggestions.length, stdout.rows],
   );
   const maxHistoryLineOffset = Math.max(0, renderedContentLines.length - maxVisibleHistoryLines);
   const visibleContentLines = useMemo(
     () => sliceVisibleHistory(renderedContentLines, maxVisibleHistoryLines, historyLineOffset),
     [historyLineOffset, maxVisibleHistoryLines, renderedContentLines],
   );
-  const maxVisibleHistoryLinesRef = useRef(maxVisibleHistoryLines);
-  const maxHistoryLineOffsetRef = useRef(maxHistoryLineOffset);
-
-  useEffect(() => {
-    maxVisibleHistoryLinesRef.current = maxVisibleHistoryLines;
-    maxHistoryLineOffsetRef.current = maxHistoryLineOffset;
-  }, [maxHistoryLineOffset, maxVisibleHistoryLines]);
-
   useEffect(() => {
     let isCancelled = false;
 
@@ -132,7 +133,7 @@ export function ChatView({ initialSession, onSubmit }: ChatViewProps) {
       return;
     }
 
-    stdout.write("\u001B[?1004h\u001B[?1000h\u001B[?1006h");
+    stdout.write("\u001B[?1004h");
 
     const handleData = (chunk: Buffer | string) => {
       const value = typeof chunk === "string" ? chunk : chunk.toString("utf8");
@@ -143,21 +144,13 @@ export function ChatView({ initialSession, onSubmit }: ChatViewProps) {
       if (value.includes("\u001B[O")) {
         setIsTerminalFocused(false);
       }
-
-      for (const direction of parseMouseScroll(value)) {
-        setHistoryLineOffset((current) =>
-          direction === "up"
-            ? Math.min(maxHistoryLineOffsetRef.current, current + 1)
-            : Math.max(0, current - 1),
-        );
-      }
     };
 
     stdin.on("data", handleData);
 
     return () => {
       stdin.off("data", handleData);
-      stdout.write("\u001B[?1004l\u001B[?1000l\u001B[?1006l");
+      stdout.write("\u001B[?1004l");
     };
   }, [stdin, stdout]);
 
@@ -172,6 +165,36 @@ export function ChatView({ initialSession, onSubmit }: ChatViewProps) {
 
     if (key.return) {
       void submit();
+      return;
+    }
+
+    if (key.tab) {
+      if (inputSuggestions.length === 0) {
+        return;
+      }
+
+      const suggestion = inputSuggestions[completionIndex % inputSuggestions.length];
+      setInput(suggestion.completion);
+      setCursorIndex(suggestion.completion.length);
+      setCompletionIndex((current) => (current + 1) % inputSuggestions.length);
+      return;
+    }
+
+    if (key.upArrow) {
+      if (inputSuggestions.length === 0) {
+        return;
+      }
+
+      setCompletionIndex((current) => (current - 1 + inputSuggestions.length) % inputSuggestions.length);
+      return;
+    }
+
+    if (key.downArrow) {
+      if (inputSuggestions.length === 0) {
+        return;
+      }
+
+      setCompletionIndex((current) => (current + 1) % inputSuggestions.length);
       return;
     }
 
@@ -231,6 +254,7 @@ export function ChatView({ initialSession, onSubmit }: ChatViewProps) {
 
     setInput((current) => `${current.slice(0, cursorIndex)}${sanitizedValue}${current.slice(cursorIndex)}`);
     setCursorIndex((current) => current + sanitizedValue.length);
+    setCompletionIndex(0);
   });
 
   const submit = async () => {
@@ -244,14 +268,17 @@ export function ChatView({ initialSession, onSubmit }: ChatViewProps) {
     setInput("");
     setCursorIndex(0);
     setHistoryLineOffset(0);
+    setCompletionIndex(0);
+    setProgressUpdate(null);
 
     try {
-      const response = await onSubmit(trimmed, session);
+      const response = await onSubmit(trimmed, session, (update) => setProgressUpdate(update));
       setSession(response.session);
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : "Unknown chat error");
     } finally {
       setPending(false);
+      setProgressUpdate(null);
     }
   };
 
@@ -278,11 +305,11 @@ export function ChatView({ initialSession, onSubmit }: ChatViewProps) {
 
       {error ? <Text color="red">{error}</Text> : null}
 
-      {slashCommands.length > 0 ? (
+      {inputSuggestions.length > 0 ? (
         <Box flexDirection="column" flexShrink={0} marginTop={0} paddingLeft={INPUT_CONTENT_INDENT}>
-          {slashCommands.map((command) => (
-            <Text key={command.name} dimColor>
-              {command.usage}  —  {command.description}
+          {inputSuggestions.map((suggestion, index) => (
+            <Text key={suggestion.label} dimColor={index !== completionIndex % inputSuggestions.length}>
+              {suggestion.description ? `${suggestion.label}  —  ${suggestion.description}` : suggestion.label}
             </Text>
           ))}
         </Box>
@@ -306,17 +333,22 @@ export function ChatView({ initialSession, onSubmit }: ChatViewProps) {
         </Box>
       </Box>
 
-      <Box flexDirection="column" flexShrink={0} marginTop={0} paddingLeft={INPUT_BOX_INDENT}>
+        <Box flexDirection="column" flexShrink={0} marginTop={0} paddingLeft={INPUT_BOX_INDENT}>
         {pending ? (
-          <Text color="cyan">
-            <Spinner type="dots" /> Working...
-          </Text>
+          <Box flexDirection="column">
+            <Text color="cyan">
+              <Spinner type="dots" /> {progressUpdate?.phase === "thinking" ? "Thinking..." : "Working..."}
+            </Text>
+            {progressUpdate?.thinking ? (
+              <Text dimColor>{progressUpdate.thinking}</Text>
+            ) : null}
+          </Box>
         ) : null}
         <FooterLine
           width={Math.max(24, (stdout.columns ?? 80) - INPUT_BOX_INDENT)}
           directory={formatWorkspacePath(session.cwd)}
           branchLabel={branchLabel}
-          model={session.model}
+          model={formatModelLabel(session)}
         />
       </Box>
     </Box>
@@ -347,6 +379,36 @@ function FooterLine({ width, directory, branchLabel, model }: FooterLineProps) {
       </Box>
     </Box>
   );
+}
+
+function formatModelLabel(session: ChatSessionState): string {
+  if (session.selectionMode === "auto") {
+    return session.lastResolvedModel ? `auto · ${session.lastResolvedModel}` : "auto";
+  }
+
+  return session.lastResolvedModel ?? session.model;
+}
+
+function buildInputSuggestions(input: string, availableModels: string[]): InputSuggestion[] {
+  const trimmed = input.trimStart();
+  const modelCommandMatch = trimmed.match(/^\/(model|manual)(?:\s+(.*))?$/);
+  if (modelCommandMatch) {
+    const command = modelCommandMatch[1];
+    const query = (modelCommandMatch[2] ?? "").trim().toLowerCase();
+    return availableModels
+      .filter((model) => !query || model.toLowerCase().startsWith(query))
+      .map((model) => ({
+        label: model,
+        description: command === "manual" ? "Set and pin this manual model." : "",
+        completion: `/${command} ${model}`,
+      }));
+  }
+
+  return matchSlashCommands(input).map((command) => ({
+    label: command.usage,
+    description: command.description,
+    completion: command.usage.replace(/\s*\[.*$/, ""),
+  }));
 }
 
 function renderHistoryLines(history: ChatMessage[], width: number): RenderedHistoryLine[] {

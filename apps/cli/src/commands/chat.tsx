@@ -14,6 +14,7 @@ export async function runChat(): Promise<void> {
   const config = await configService.load();
   const rag = new RagClient(config.network.rag_api_base_url);
   const ollama = new OllamaClient(config.network.ollama_base_url);
+  const availableModels = await ollama.listModels().then((models) => models.map((model) => model.name)).catch(() => []);
   const chatService = new ChatService(
     configService,
     new ChatSessionService(),
@@ -33,7 +34,8 @@ export async function runChat(): Promise<void> {
     const app = render(
       <ChatView
         initialSession={initialSession}
-        onSubmit={(question, session) => chatService.handleInput(question, session)}
+        availableModels={availableModels}
+        onSubmit={(question, session, onProgress) => chatService.handleInput(question, session, onProgress)}
       />,
     );
 

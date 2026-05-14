@@ -48,7 +48,7 @@ The build expects:
 Optional:
 
 - `AEGIS_BUNDLED_MODEL_STORE`
-  Path to the default bundled model-store tarball produced by [export-ollama-models.sh](/Users/blasey/Developer/aegis/scripts/export-ollama-models.sh). For the recommended default, this should contain `gemma3:4b`.
+  Path to the default bundled model-store tarball produced by [export-ollama-models.sh](/Users/blasey/Developer/aegis/scripts/export-ollama-models.sh). This is optional and is only needed when you want a self-contained single-machine package.
 - `AEGIS_OPTIONAL_MODEL_PACKS`
   Comma-separated named optional pack archives in the format `name=/absolute/path/archive.tar.gz`. For example: `gemma3-12b=/absolute/path/gemma3-12b-model-store.tar.gz`
 - `AEGIS_CODESIGN_IDENTITY`
@@ -83,10 +83,15 @@ npm run build:macos-pkg
 
 ## Model Strategy
 
-The macOS package now assumes:
+The macOS package supports two deployment styles:
 
-- `gemma3:4b` is the preinstalled default model
-- `gemma3:12b` is shipped only as an optional model-pack archive
+- connect to an existing host or remote Ollama runtime, with no bundled model at all
+- bundle a default local model store plus optional model packs for strict single-machine deployments
+
+If you bundle models, the current defaults are:
+
+- `gemma3:4b` as the default bundled model
+- `gemma3:12b` as an optional model-pack archive
 
 After install, operators can import optional packs with:
 

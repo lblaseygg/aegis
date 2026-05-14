@@ -7,7 +7,9 @@ export interface SlashCommandDefinition {
 export const SLASH_COMMANDS: SlashCommandDefinition[] = [
   { name: "help", usage: "/help", description: "Show the available slash commands." },
   { name: "mode", usage: "/mode docs|code", description: "Switch between docs mode and code mode." },
-  { name: "model", usage: "/model [name]", description: "Show the active model or switch to an installed one." },
+  { name: "auto", usage: "/auto", description: "Enable automatic model routing." },
+  { name: "manual", usage: "/manual [name]", description: "Use one fixed model for future prompts." },
+  { name: "model", usage: "/model [name]", description: "Show the active model state or change the manual fallback model." },
   { name: "collection", usage: "/collection [name]", description: "Show or change the active document collection." },
   { name: "review", usage: "/review [off]", description: "Enable review mode or return to normal code chat." },
   { name: "cwd", usage: "/cwd [path]", description: "Show or change the current workspace directory." },
@@ -19,6 +21,8 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
 export type ParsedSlashCommand =
   | { type: "help" }
   | { type: "mode"; mode?: "docs" | "code" }
+  | { type: "auto" }
+  | { type: "manual"; model?: string }
   | { type: "model"; model?: string }
   | { type: "resume" }
   | { type: "review"; enabled: boolean }
@@ -57,6 +61,10 @@ export function parseSlashCommand(input: string): ParsedSlashCommand | null {
       return { type: "help" };
     case "mode":
       return value === "docs" || value === "code" ? { type: "mode", mode: value } : { type: "mode" };
+    case "auto":
+      return { type: "auto" };
+    case "manual":
+      return value ? { type: "manual", model: value } : { type: "manual" };
     case "model":
       return value ? { type: "model", model: value } : { type: "model" };
     case "resume":

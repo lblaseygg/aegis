@@ -7,6 +7,7 @@ import { App } from "./components/App.js";
 import { runAuditExport } from "./commands/audit.js";
 import { runBundleCreate, runBundleVerify } from "./commands/bundle.js";
 import { runChat } from "./commands/chat.js";
+import { runCleanup } from "./commands/cleanup.js";
 import { runDoctor } from "./commands/doctor.js";
 import { runDown } from "./commands/down.js";
 import { runInit } from "./commands/init.js";
@@ -58,6 +59,15 @@ program
   .description("Check local services and configuration")
   .action(async () => {
     await runDoctor();
+  });
+
+program
+  .command("cleanup")
+  .option("--builds", "Remove generated build artifacts")
+  .option("--sessions", "Remove persisted chat session files and temp session files")
+  .description("Remove safe local artifacts to recover disk space")
+  .action(async (options: { builds?: boolean; sessions?: boolean }) => {
+    await runCleanup(options);
   });
 
 program
@@ -134,10 +144,10 @@ runtime
 
 runtime
   .command("use")
-  .argument("<mode>", "Runtime mode: native or docker")
+  .argument("<mode>", "Runtime mode: local, remote, or docker")
   .description("Select the local runtime mode")
   .action(async (mode: string) => {
-    await runRuntimeUse(mode as "native" | "docker");
+    await runRuntimeUse(mode as "local" | "remote" | "docker");
   });
 
 rag
