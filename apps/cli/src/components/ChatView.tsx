@@ -87,6 +87,10 @@ export function ChatView({ initialSession, availableModels, onResolveFiles, onSu
   const { exit } = useApp();
   const { stdin } = useStdin();
   const { stdout } = useStdout();
+  const [viewport, setViewport] = useState(() => ({
+    columns: stdout.columns ?? 80,
+    rows: stdout.rows ?? 24,
+  }));
   const [session, setSession] = useState(initialSession);
   const [input, setInput] = useState("");
   const [cursorIndex, setCursorIndex] = useState(0);
@@ -110,19 +114,24 @@ export function ChatView({ initialSession, availableModels, onResolveFiles, onSu
     [completionIndex, inputSuggestions],
   );
   const activeSuggestionRows = visibleSuggestions.length;
-  const historyWidth = Math.max(24, (stdout.columns ?? 80) - 2);
-  const renderedContentLines = useMemo(
-    () => [...renderHeaderLines(launchQuote, historyWidth), ...renderHistoryLines(session.history, historyWidth)],
-    [historyWidth, launchQuote, session.history],
+  const viewportRows = viewport.rows;
+  const historyWidth = Math.max(24, viewport.columns - 2);
+  const headerLines = useMemo(
+    () => renderHeaderLines(launchQuote, historyWidth),
+    [historyWidth, launchQuote],
+  );
+  const renderedHistoryLines = useMemo(
+    () => renderHistoryLines(session.history, historyWidth),
+    [historyWidth, session.history],
   );
   const maxVisibleHistoryLines = useMemo(
-    () => estimateVisibleHistoryLines(stdout.rows ?? 24, activeSuggestionRows, Boolean(error), pending),
-    [activeSuggestionRows, error, pending, stdout.rows],
+    () => estimateVisibleHistoryLines(viewportRows, headerLines.length, activeSuggestionRows, Boolean(error), pending),
+    [activeSuggestionRows, error, headerLines.length, pending, viewportRows],
   );
-  const maxHistoryLineOffset = Math.max(0, renderedContentLines.length - maxVisibleHistoryLines);
-  const visibleContentLines = useMemo(
-    () => sliceVisibleHistory(renderedContentLines, maxVisibleHistoryLines, historyLineOffset),
-    [historyLineOffset, maxVisibleHistoryLines, renderedContentLines],
+  const maxHistoryLineOffset = Math.max(0, renderedHistoryLines.length - maxVisibleHistoryLines);
+  const visibleHistoryLines = useMemo(
+    () => sliceVisibleHistory(renderedHistoryLines, maxVisibleHistoryLines, historyLineOffset),
+    [historyLineOffset, maxVisibleHistoryLines, renderedHistoryLines],
   );
   useEffect(() => {
     let isCancelled = false;
@@ -163,6 +172,30 @@ export function ChatView({ initialSession, availableModels, onResolveFiles, onSu
       isCancelled = true;
     };
   }, [onResolveFiles, session.cwd]);
+
+  useEffect(() => {
+    const updateViewport = () => {
+      setViewport((current) => {
+        const next = {
+          columns: stdout.columns ?? 80,
+          rows: stdout.rows ?? 24,
+        };
+
+        if (current.columns === next.columns && current.rows === next.rows) {
+          return current;
+        }
+
+        return next;
+      });
+    };
+
+    updateViewport();
+    stdout.on("resize", updateViewport);
+
+    return () => {
+      stdout.off("resize", updateViewport);
+    };
+  }, [stdout]);
 
   useEffect(() => {
     if (!stdout.isTTY) {
@@ -337,9 +370,9 @@ export function ChatView({ initialSession, availableModels, onResolveFiles, onSu
   };
 
   return (
-    <Box flexDirection="column">
-      <Box flexDirection="column" marginTop={3}>
-        {visibleContentLines.map((line) => (
+    <Box flexDirection="column" height={viewportRows}>
+      <Box flexDirection="column" flexShrink={0}>
+        {headerLines.map((line) => (
           line.segments ? (
             <Box key={line.id}>
               {line.segments.map((segment, index) => (
@@ -361,53 +394,77 @@ export function ChatView({ initialSession, availableModels, onResolveFiles, onSu
         ))}
       </Box>
 
-      {error ? <Text color="red">{error}</Text> : null}
-
-      {activeSuggestionRows > 0 ? (
-        <Box flexDirection="column" flexShrink={0} marginTop={0} paddingLeft={INPUT_CONTENT_INDENT}>
-          {visibleSuggestions.map((suggestion) => (
-            <Text key={suggestion.completion} dimColor={!suggestion.selected}>
-              {suggestion.description ? `${suggestion.label}  —  ${suggestion.description}` : suggestion.label}
+      <Box flexDirection="column" flexGrow={1} justifyContent="flex-end">
+        {visibleHistoryLines.map((line) => (
+          line.segments ? (
+            <Box key={line.id}>
+              {line.segments.map((segment, index) => (
+                <Text
+                  key={`${line.id}-segment-${index}`}
+                  color={segment.color}
+                  dimColor={segment.dimColor}
+                  bold={segment.bold}
+                >
+                  {segment.text}
+                </Text>
+              ))}
+            </Box>
+          ) : (
+            <Text key={line.id} color={line.color} dimColor={line.dimColor} bold={line.bold}>
+              {line.text || " "}
             </Text>
-          ))}
-        </Box>
-      ) : null}
-
-      <Box
-        borderStyle="round"
-        borderColor={AEGIS_ACCENT}
-        borderDimColor={!isTerminalFocused}
-        flexDirection="column"
-        flexShrink={0}
-        marginTop={0}
-        paddingX={1}
-        paddingY={0}
-      >
-        <Box>
-          <Text color={ASSISTANT_PROMPT_COLOR}>
-            {"> "}
-          </Text>
-          {renderInputContent(input, cursorIndex, placeholder, isTerminalFocused)}
-        </Box>
+          )
+        ))}
       </Box>
 
-        <Box flexDirection="column" flexShrink={0} marginTop={0} paddingLeft={INPUT_BOX_INDENT}>
-        {pending ? (
-          <Box flexDirection="column">
-            <Text color="cyan">
-              <Spinner type="dots" /> {progressUpdate?.phase === "thinking" ? "Thinking..." : "Working..."}
-            </Text>
-            {progressUpdate?.thinking ? (
-              <Text dimColor>{progressUpdate.thinking}</Text>
-            ) : null}
+      <Box flexDirection="column" flexShrink={0}>
+        {error ? <Text color="red">{error}</Text> : null}
+
+        {activeSuggestionRows > 0 ? (
+          <Box flexDirection="column" paddingLeft={INPUT_CONTENT_INDENT}>
+            {visibleSuggestions.map((suggestion) => (
+              <Text key={suggestion.completion} dimColor={!suggestion.selected}>
+                {suggestion.description ? `${suggestion.label}  —  ${suggestion.description}` : suggestion.label}
+              </Text>
+            ))}
           </Box>
         ) : null}
-        <FooterLine
-          width={Math.max(24, (stdout.columns ?? 80) - INPUT_BOX_INDENT)}
-          directory={formatWorkspacePath(session.cwd)}
-          branchLabel={branchLabel}
-          model={formatModelLabel(session)}
-        />
+
+        <Box
+          borderStyle="round"
+          borderColor={AEGIS_ACCENT}
+          borderDimColor={!isTerminalFocused}
+          flexDirection="column"
+          flexShrink={0}
+          paddingX={1}
+          paddingY={0}
+        >
+          <Box>
+            <Text color={ASSISTANT_PROMPT_COLOR}>
+              {"> "}
+            </Text>
+            {renderInputContent(input, cursorIndex, placeholder, isTerminalFocused)}
+          </Box>
+        </Box>
+
+        <Box flexDirection="column" flexShrink={0} paddingLeft={INPUT_BOX_INDENT}>
+          {pending ? (
+            <Box flexDirection="column">
+              <Text color="cyan">
+                <Spinner type="dots" /> {progressUpdate?.phase === "thinking" ? "Thinking..." : "Working..."}
+              </Text>
+              {progressUpdate?.thinking ? (
+                <Text dimColor>{progressUpdate.thinking}</Text>
+              ) : null}
+            </Box>
+          ) : null}
+          <FooterLine
+            width={Math.max(24, viewport.columns - INPUT_BOX_INDENT)}
+            directory={formatWorkspacePath(session.cwd)}
+            branchLabel={branchLabel}
+            model={formatModelLabel(session)}
+          />
+        </Box>
       </Box>
     </Box>
   );
@@ -726,8 +783,14 @@ function stripTerminalArtifacts(value: string): string {
     .replace(/\[<\d+;\d+;\d+[mM]/g, "");
 }
 
-function estimateVisibleHistoryLines(rows: number, suggestionRows: number, hasError: boolean, pending: boolean): number {
-  const reservedRows = 5 + suggestionRows + (hasError ? 1 : 0) + (pending ? 1 : 0);
+function estimateVisibleHistoryLines(
+  rows: number,
+  headerRows: number,
+  suggestionRows: number,
+  hasError: boolean,
+  pending: boolean,
+): number {
+  const reservedRows = headerRows + 4 + suggestionRows + (hasError ? 1 : 0) + (pending ? 2 : 0);
   return Math.max(4, rows - reservedRows);
 }
 

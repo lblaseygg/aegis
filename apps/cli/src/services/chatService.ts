@@ -126,6 +126,7 @@ export class ChatService {
         return this.reply(session, `Switched to ${command.mode} mode.`, "system");
       case "auto":
         session.selectionMode = "auto";
+        session.lastResolvedModel = undefined;
         await this.configService.selectModelSelectionMode("auto");
         return this.reply(session, "Automatic model routing enabled.", "system");
       case "manual":
@@ -149,7 +150,7 @@ export class ChatService {
           ].join("\n");
           return this.reply(
             session,
-            `Selection mode: ${session.selectionMode}\nManual model: ${session.model}\nLast used: ${session.lastResolvedModel ?? session.model}\nInstalled models: ${available}\nProfiles:\n${profiles}`,
+            `Selection mode: ${session.selectionMode}\nManual model: ${session.model}\nLast used: ${formatLastUsedModel(session)}\nInstalled models: ${available}\nProfiles:\n${profiles}`,
             "system",
           );
         }
@@ -284,4 +285,12 @@ function appendMessage(
     ...session,
     history: [...session.history, message],
   };
+}
+
+function formatLastUsedModel(session: ChatSessionState): string {
+  if (session.lastResolvedModel) {
+    return session.lastResolvedModel;
+  }
+
+  return session.selectionMode === "auto" ? "not resolved yet" : session.model;
 }
