@@ -124,14 +124,18 @@ export function ChatView({ initialSession, availableModels, onResolveFiles, onSu
     () => renderHistoryLines(session.history, historyWidth),
     [historyWidth, session.history],
   );
-  const maxVisibleHistoryLines = useMemo(
-    () => estimateVisibleHistoryLines(viewportRows, headerLines.length, activeSuggestionRows, Boolean(error), pending),
-    [activeSuggestionRows, error, headerLines.length, pending, viewportRows],
+  const renderedContentLines = useMemo(
+    () => [...headerLines, ...renderedHistoryLines],
+    [headerLines, renderedHistoryLines],
   );
-  const maxHistoryLineOffset = Math.max(0, renderedHistoryLines.length - maxVisibleHistoryLines);
-  const visibleHistoryLines = useMemo(
-    () => sliceVisibleHistory(renderedHistoryLines, maxVisibleHistoryLines, historyLineOffset),
-    [historyLineOffset, maxVisibleHistoryLines, renderedHistoryLines],
+  const maxVisibleContentLines = useMemo(
+    () => estimateVisibleContentLines(viewportRows, activeSuggestionRows, Boolean(error), pending),
+    [activeSuggestionRows, error, pending, viewportRows],
+  );
+  const maxHistoryLineOffset = Math.max(0, renderedContentLines.length - maxVisibleContentLines);
+  const visibleContentLines = useMemo(
+    () => sliceVisibleHistory(renderedContentLines, maxVisibleContentLines, historyLineOffset),
+    [historyLineOffset, maxVisibleContentLines, renderedContentLines],
   );
   useEffect(() => {
     let isCancelled = false;
@@ -287,13 +291,13 @@ export function ChatView({ initialSession, availableModels, onResolveFiles, onSu
 
     if (key.pageUp) {
       setHistoryLineOffset((current) =>
-        Math.min(maxHistoryLineOffset, current + Math.max(1, maxVisibleHistoryLines - 1)),
+        Math.min(maxHistoryLineOffset, current + Math.max(1, maxVisibleContentLines - 1)),
       );
       return;
     }
 
     if (key.pageDown) {
-      setHistoryLineOffset((current) => Math.max(0, current - Math.max(1, maxVisibleHistoryLines - 1)));
+      setHistoryLineOffset((current) => Math.max(0, current - Math.max(1, maxVisibleContentLines - 1)));
       return;
     }
 
@@ -371,31 +375,8 @@ export function ChatView({ initialSession, availableModels, onResolveFiles, onSu
 
   return (
     <Box flexDirection="column" height={viewportRows}>
-      <Box flexDirection="column" flexShrink={0}>
-        {headerLines.map((line) => (
-          line.segments ? (
-            <Box key={line.id}>
-              {line.segments.map((segment, index) => (
-                <Text
-                  key={`${line.id}-segment-${index}`}
-                  color={segment.color}
-                  dimColor={segment.dimColor}
-                  bold={segment.bold}
-                >
-                  {segment.text}
-                </Text>
-              ))}
-            </Box>
-          ) : (
-            <Text key={line.id} color={line.color} dimColor={line.dimColor} bold={line.bold}>
-              {line.text || " "}
-            </Text>
-          )
-        ))}
-      </Box>
-
-      <Box flexDirection="column" flexGrow={1} justifyContent="flex-end">
-        {visibleHistoryLines.map((line) => (
+      <Box flexDirection="column" flexGrow={1}>
+        {visibleContentLines.map((line) => (
           line.segments ? (
             <Box key={line.id}>
               {line.segments.map((segment, index) => (
@@ -783,14 +764,13 @@ function stripTerminalArtifacts(value: string): string {
     .replace(/\[<\d+;\d+;\d+[mM]/g, "");
 }
 
-function estimateVisibleHistoryLines(
+function estimateVisibleContentLines(
   rows: number,
-  headerRows: number,
   suggestionRows: number,
   hasError: boolean,
   pending: boolean,
 ): number {
-  const reservedRows = headerRows + 4 + suggestionRows + (hasError ? 1 : 0) + (pending ? 2 : 0);
+  const reservedRows = 4 + suggestionRows + (hasError ? 1 : 0) + (pending ? 2 : 0);
   return Math.max(4, rows - reservedRows);
 }
 
